@@ -117,3 +117,23 @@ def test_three_way_switch(tmp_path):
         assert re.search(r"\|\s*Status\s*\|\s*FROZEN\s*\|", txt), md.name
     reg = DecisionRegister(init / ".aieos" / "decision-register.jsonl")
     assert reg.verify_chain()
+
+
+def test_escalation_surface(tmp_path):
+    """Phase 5 escalation bullet: convergence exhaustion -> conductor ESCALATED,
+    recorded in the Decision Register (live, against the real harness)."""
+    init, aieos_root, _hy = _setup(tmp_path)
+    hy = tmp_path / "harness-fail.yaml"
+    hy.write_text("providers:\n  mock_fail:\n    enabled: true\n    model: failing-mock-v1\n")
+    harness_cmd = [sys.executable, "-m", "src.cli", "--config", str(hy)]
+    driver = SubprocessHarnessDriver(harness_cmd, aieos_root, cwd=HARNESS)
+    conductor = Conductor(driver, init, ["EEK:PRD", "EEK:SAD"])
+
+    st = conductor.run()
+    assert st.status == ConductorStatus.ESCALATED.value
+    assert st.current == "EEK:PRD"
+    # no artifact persisted; escalation recorded in the register
+    assert not (init / "docs" / "sdlc" / "prd.md").exists()
+    reg = DecisionRegister(init / ".aieos" / "decision-register.jsonl")
+    assert reg.verify_chain()
+    assert reg.entries()[-1].entry_type == "ESCALATION"
