@@ -1,0 +1,1286 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# AIEOS Kit Manifest — Single Source of Truth
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Canonical location: aieos-governance-foundation/kit-manifest.yml
+#
+# Purpose:
+#   Machine-readable registry of every kit, artifact, dependency edge,
+#   boundary contract, cross-cutting trigger, and synchronized file in AIEOS.
+#   Audit agents validate prose documents against this file — not against
+#   each other. If a prose document and this manifest disagree, the manifest
+#   wins and the prose needs updating.
+#
+# Maintenance:
+#   - Update this file FIRST when adding kits, artifacts, or dependency edges.
+#   - Run TOOL-KIT-SYNC-AUDIT after every change to verify alignment.
+#   - Version the manifest alongside governance-model.md changes.
+#
+# Schema version history:
+#   1.0  — Initial manifest (2026-04-10)
+# ─────────────────────────────────────────────────────────────────────────────
+
+manifest_version: "1.0"
+governance_model_version: "1.6"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# KITS
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Each kit entry is keyed by its abbreviation (SDK, PIK, etc.).
+# Fields:
+#   layer           — Integer layer number (1–15)
+#   full_name       — Human-readable kit name
+#   repository      — GitHub repo name (wtlinnertz/{repository})
+#   category        — "pipeline" | "operational" | "cross-cutting"
+#   status          — "built" | "planned" | "deprecated"
+#   optional        — true if kit can be skipped in standard flows
+#   question        — The layer question this kit answers
+#   artifacts       — Ordered list of artifact types (see Artifact schema below)
+#   artifact_flow   — Ordered list of artifact IDs representing the internal sequence
+#   entry_points    — Artifacts that can be entered from outside AIEOS (external entry)
+#   entry_from      — Boundary contracts: which upstream kits hand off to this kit
+#   triggers        — Cross-cutting trigger definitions (cross-cutting kits only)
+#   feeds_into      — Cross-cutting outputs that feed back into pipeline kits
+#
+# Artifact schema:
+#   id              — Uppercase abbreviation (e.g., "WCR")
+#   full_name       — Human-readable artifact name
+#   spec_file       — Filename in docs/specs/ (without path prefix)
+#   human_authored  — true if this is a human-authored entry gate (no prompt file)
+#   optional        — true if artifact can be skipped in some flows
+#
+# ═════════════════════════════════════════════════════════════════════════════
+
+kits:
+
+  # ─── Layer 1: Strategic Direction ────────────────────────────────────────
+
+  SDK:
+    layer: 1
+    full_name: "Strategic Direction Kit"
+    repository: "aieos-strategic-direction-kit"
+    category: "pipeline"
+    status: "built"
+    optional: true   # initiatives can enter at PIK or EEK directly
+    question: "What are we trying to achieve?"
+
+    artifacts:
+      - id: CLA
+        full_name: "Capability Lifecycle Assessment"
+        spec_file: "cla-spec.md"
+        human_authored: false
+        optional: true   # entry point for retroactive onboarding only
+      - id: PCR
+        full_name: "Product Capability Roadmap"
+        spec_file: "pcr-spec.md"
+        human_authored: false
+        optional: true   # roadmap phase is optional
+      - id: TIR
+        full_name: "Technology Investment Roadmap"
+        spec_file: "tir-spec.md"
+        human_authored: false
+        optional: true   # roadmap phase is optional
+      - id: SBR
+        full_name: "Strategic Bet Record"
+        spec_file: "sbr-spec.md"
+        human_authored: false
+        optional: false
+      - id: PPR
+        full_name: "Portfolio Prioritization Record"
+        spec_file: "ppr-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - CLA    # optional: catalog existing capabilities
+      - PCR    # optional: product roadmap (requires CLA)
+      - TIR    # optional: tech roadmap (requires PCR)
+      - SBR    # per-bet (from PCR or ad hoc)
+      - PPR    # ranks all frozen SBRs
+
+    entry_points:
+      - CLA    # retroactive onboarding entry
+      - SBR    # direct strategic bet entry
+
+    entry_from:
+      iek:
+        file: "entry-from-iek.md"
+        expected_artifacts: [ES]
+        description: "IEK re-discover signal triggers new SBRs or updates CLA lifecycle"
+
+  # ─── Layer 2: Product Intelligence ───────────────────────────────────────
+
+  PIK:
+    layer: 2
+    full_name: "Product Intelligence Kit"
+    repository: "aieos-product-intelligence-kit"
+    category: "pipeline"
+    status: "built"
+    optional: false
+    question: "What should we build and why?"
+
+    artifacts:
+      - id: WCR
+        full_name: "Work Classification Record"
+        spec_file: "work-classification-spec.md"
+        human_authored: true
+        optional: false
+      - id: DI
+        full_name: "Discovery Intake"
+        spec_file: "discovery-intake-spec.md"
+        human_authored: true
+        optional: false
+      - id: PFD
+        full_name: "Problem Framing Document"
+        spec_file: "problem-framing-spec.md"
+        human_authored: false
+        optional: false
+      - id: VH
+        full_name: "Value Hypothesis"
+        spec_file: "value-hypothesis-spec.md"
+        human_authored: false
+        optional: false
+      - id: AR
+        full_name: "Assumption Register"
+        spec_file: "assumption-register-spec.md"
+        human_authored: false
+        optional: false
+      - id: EL
+        full_name: "Experiment Log"
+        spec_file: "experiment-log-spec.md"
+        human_authored: false
+        optional: false
+      - id: DPRD
+        full_name: "Discovery PRD"
+        spec_file: "discovery-prd-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - WCR
+      - DI
+      - PFD
+      - VH
+      - AR
+      - EL
+      - DPRD
+
+    entry_points:
+      - WCR    # new work request
+
+    entry_from:
+      sdk:
+        file: "entry-from-sdk.md"
+        expected_artifacts: [PPR, SBR, PCR]
+        description: "Frozen PPR with above-the-line SBRs provide strategic context"
+      iek:
+        file: "entry-from-iek.md"
+        expected_artifacts: [ES]
+        description: "IEK re-discover signal triggers new discovery cycle"
+
+  # ─── Layer 3: Solution Sourcing ──────────────────────────────────────────
+
+  SSK:
+    layer: 3
+    full_name: "Solution Sourcing Kit"
+    repository: "aieos-solution-sourcing-kit"
+    category: "pipeline"
+    status: "built"
+    optional: true   # skip when Build is obvious
+    question: "Build, buy, or adopt?"
+
+    artifacts:
+      - id: SOER
+        full_name: "Sourcing Options Evaluation Record"
+        spec_file: "soer-spec.md"
+        human_authored: true
+        optional: false
+      - id: VER
+        full_name: "Vendor/Solution Evaluation Record"
+        spec_file: "ver-spec.md"
+        human_authored: false
+        optional: false
+      - id: SDR
+        full_name: "Sourcing Decision Record"
+        spec_file: "sdr-spec.md"
+        human_authored: false   # AI-generated, human provides the decision
+        optional: false
+
+    artifact_flow:
+      - SOER
+      - VER
+      - SDR
+
+    entry_points: []   # entered only via PIK handoff
+
+    entry_from:
+      pik:
+        file: "entry-from-pik.md"
+        expected_artifacts: [DPRD]
+        description: "Frozen DPRD triggers sourcing evaluation"
+
+  # ─── Layer 4: Engineering Execution ──────────────────────────────────────
+
+  EEK:
+    layer: 4
+    full_name: "Engineering Execution Kit"
+    repository: "aieos-engineering-execution"   # NOTE: no -kit suffix
+    category: "pipeline"
+    status: "built"
+    optional: false
+    question: "How do we build it correctly?"
+
+    artifacts:
+      - id: KER
+        full_name: "Kit Entry Record"
+        spec_file: "kit-entry-spec.md"
+        human_authored: true
+        optional: false
+      - id: PRD
+        full_name: "Product Requirements Document"
+        spec_file: "prd-spec.md"
+        human_authored: false
+        optional: false
+      - id: ACF
+        full_name: "Architecture Context File"
+        spec_file: "acf-spec.md"
+        human_authored: false
+        optional: false
+      - id: DKR
+        full_name: "Design Knowledge Record"
+        spec_file: "dkr-spec.md"
+        human_authored: false
+        optional: true   # optional between ACF and SAD
+      - id: SAD
+        full_name: "Solution Architecture Document"
+        spec_file: "sad-spec.md"
+        human_authored: false
+        optional: false
+      - id: DCF
+        full_name: "Design Context File"
+        spec_file: "dcf-spec.md"
+        human_authored: false
+        optional: false
+      - id: TDD
+        full_name: "Technical Design Document"
+        spec_file: "tdd-spec.md"
+        human_authored: false
+        optional: false
+      - id: WDD
+        full_name: "Work Decomposition Document"
+        spec_file: "wdd-spec.md"
+        human_authored: false
+        optional: false
+      - id: ORD
+        full_name: "Operational Readiness Decision"
+        spec_file: "ord-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - KER
+      - PRD
+      - ACF    # ACF and SAD can run in parallel after PRD
+      - DKR    # optional, between ACF and SAD
+      - SAD
+      - DCF    # DCF and TDD can run in parallel after ACF+SAD
+      - TDD
+      - WDD
+      - ORD
+
+    # Parallelism rules (artifacts that can run concurrently)
+    parallel_groups:
+      - [ACF, SAD]       # both depend on PRD only
+      - [DCF, TDD]       # both depend on ACF + SAD
+
+    entry_points:
+      - KER    # Path B: direct entry for well-understood enhancements
+
+    entry_from:
+      pik:
+        file: "entry-from-pik.md"
+        expected_artifacts: [DPRD]
+        description: "Path A: frozen DPRD placed as PRD"
+      ssk:
+        file: "entry-from-ssk.md"
+        expected_artifacts: [SDR]
+        description: "Frozen SDR alongside DPRD when SSK engaged"
+
+  # ─── Layer 5: Release & Exposure ─────────────────────────────────────────
+
+  REK:
+    layer: 5
+    full_name: "Release & Exposure Kit"
+    repository: "aieos-release-exposure-kit"
+    category: "pipeline"
+    status: "built"
+    optional: false
+    question: "How do we ship it safely?"
+
+    artifacts:
+      - id: RER
+        full_name: "Release Entry Record"
+        spec_file: "release-entry-spec.md"
+        human_authored: true
+        optional: false
+      - id: RCF
+        full_name: "Release Context File"
+        spec_file: "rcf-spec.md"
+        human_authored: false
+        optional: false
+      - id: RSA
+        full_name: "Release Safety Assessment"
+        spec_file: "rsa-spec.md"
+        human_authored: false
+        optional: false
+      - id: RP
+        full_name: "Release Plan"
+        spec_file: "rp-spec.md"
+        human_authored: false
+        optional: false
+      - id: RR
+        full_name: "Release Record"
+        spec_file: "rr-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - RER
+      - RCF
+      - RSA
+      - RP
+      - RR
+
+    entry_points: []
+
+    entry_from:
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [ORD]
+        description: "Frozen ORD triggers release planning"
+      qak:
+        file: "entry-from-qak.md"
+        expected_artifacts: [QGR]
+        description: "QGR gates REK when QAK adopted (PASS or CONDITIONAL)"
+      sck:
+        file: "entry-from-sck.md"
+        expected_artifacts: [SAR, DAR]
+        description: "Security clearance evidence feeds RSA"
+
+  # ─── Layer 6: Reliability & Resilience ───────────────────────────────────
+
+  RRK:
+    layer: 6
+    full_name: "Reliability & Resilience Kit"
+    repository: "aieos-reliability-resilience-kit"
+    category: "pipeline"
+    status: "built"
+    optional: false
+    question: "How do we keep it running?"
+
+    artifacts:
+      - id: SRER
+        full_name: "Service Reliability Entry Record"
+        spec_file: "srer-spec.md"
+        human_authored: true
+        optional: false
+      - id: SRP
+        full_name: "Service Reliability Profile"
+        spec_file: "srp-spec.md"
+        human_authored: false
+        optional: false
+      - id: IR
+        full_name: "Incident Record"
+        spec_file: "ir-spec.md"
+        human_authored: false
+        optional: true   # per-incident, may not occur
+      - id: RHR
+        full_name: "Reliability Health Report"
+        spec_file: "rhr-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - SRER
+      - SRP
+      - IR      # per-incident, runs during SRP observation period
+      - RHR     # periodic, requires active SRP
+
+    entry_points: []
+
+    entry_from:
+      rek:
+        file: "entry-from-rek.md"
+        expected_artifacts: [RR]
+        description: "Frozen RR with Layer 6 handoff"
+
+  # ─── Layer 7: Insight & Evolution ────────────────────────────────────────
+
+  IEK:
+    layer: 7
+    full_name: "Insight & Evolution Kit"
+    repository: "aieos-insight-evolution-kit"
+    category: "pipeline"
+    status: "built"
+    optional: false
+    question: "What did we learn and what changes?"
+
+    artifacts:
+      - id: ES
+        full_name: "Evolution Signal"
+        spec_file: "es-spec.md"
+        human_authored: false
+        optional: false
+      - id: PES
+        full_name: "Portfolio Evolution Signal"
+        spec_file: "pes-spec.md"
+        human_authored: false
+        optional: true   # cross-initiative synthesis
+
+    artifact_flow:
+      - ES
+      - PES     # optional, synthesizes across initiatives
+
+    entry_points: []
+
+    entry_from:
+      rrk:
+        file: "entry-from-rrk.md"
+        expected_artifacts: [RHR]
+        description: "2+ frozen RHRs trigger evolution signal synthesis"
+
+  # ─── Layer 8: Operational Diagnostics ────────────────────────────────────
+
+  ODK:
+    layer: 8
+    full_name: "Operational Diagnostics Kit"
+    repository: "aieos-operational-diagnostics-kit"
+    category: "operational"
+    status: "built"
+    optional: false
+    question: "How do we diagnose and resolve operational failures?"
+
+    artifacts:
+      - id: DCR
+        full_name: "Diagnostic Context Record"
+        spec_file: "dcr-spec.md"
+        human_authored: true
+        optional: false
+      - id: INR
+        full_name: "Investigation Record"
+        spec_file: "inr-spec.md"
+        human_authored: false
+        optional: false
+      - id: PMR
+        full_name: "Postmortem Record"
+        spec_file: "pmr-spec.md"
+        human_authored: false
+        optional: false
+      - id: RB
+        full_name: "Runbook"
+        spec_file: "rb-spec.md"
+        human_authored: false
+        optional: true
+
+    artifact_flow:
+      - DCR
+      - INR
+      - PMR
+      - RB      # optional, codified resolution for known failure class
+
+    entry_points:
+      - DCR    # production incident (SEV1/2)
+
+    entry_from:
+      rrk:
+        file: "entry-from-rrk.md"
+        expected_artifacts: [SRP]
+        description: "SRP provides SLO context for incident diagnosis (recommended)"
+
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # CROSS-CUTTING KITS (Layers 9–15)
+  # ═════════════════════════════════════════════════════════════════════════
+  #
+  # Cross-cutting kits do NOT follow the pipeline sequence. They activate
+  # at defined trigger points and run in parallel with pipeline layers.
+  #
+  # The `triggers` field replaces `artifact_flow` as the primary activation
+  # model. Each trigger specifies:
+  #   artifact      — The cross-cutting artifact produced
+  #   condition     — What event activates this trigger
+  #   upstream      — The frozen artifact(s) required
+  #   source_kit    — Which kit produces the upstream artifact
+  #   gate_type     — "trigger" (event-based) or "freeze" (sequential within kit)
+  #
+  # The `feeds_into` field describes where cross-cutting outputs feed back
+  # into pipeline kits. This is the reverse direction from triggers.
+  # ═════════════════════════════════════════════════════════════════════════
+
+  # ─── Layer 9: Quality Assurance ──────────────────────────────────────────
+
+  QAK:
+    layer: 9
+    full_name: "Quality Assurance Kit"
+    repository: "aieos-quality-assurance-kit"
+    category: "cross-cutting"
+    status: "built"
+    optional: true   # can be skipped for enhancements
+    question: "Is it verified beyond unit scope?"
+
+    artifacts:
+      - id: QAER
+        full_name: "Quality Assurance Entry Record"
+        spec_file: "qaer-spec.md"
+        human_authored: true
+        optional: false
+      - id: VP
+        full_name: "Verification Plan"
+        spec_file: "vp-spec.md"
+        human_authored: false
+        optional: false
+      - id: TCR
+        full_name: "Test Campaign Record"
+        spec_file: "tcr-spec.md"
+        human_authored: false
+        optional: false
+      - id: QGR
+        full_name: "Quality Gate Record"
+        spec_file: "qgr-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - QAER
+      - VP
+      - TCR
+      - QGR
+
+    entry_points: []
+
+    entry_from:
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [ORD, SAD, TDD, ACF, WDD]
+        description: "Frozen ORD triggers QA engagement"
+
+    triggers:
+      - artifact: QAER
+        condition: "ORD frozen"
+        upstream: [EEK:ORD]
+        gate_type: "trigger"
+
+    feeds_into:
+      - target_kit: REK
+        artifact: QGR
+        target_artifact: RER
+        description: "QGR gates REK entry (when QAK adopted)"
+
+  # ─── Layer 10: Security & Compliance ─────────────────────────────────────
+
+  SCK:
+    layer: 10
+    full_name: "Security & Compliance Kit"
+    repository: "aieos-security-compliance-kit"
+    category: "cross-cutting"
+    status: "built"
+    optional: true
+    question: "Is it secure and compliant?"
+
+    artifacts:
+      - id: TM
+        full_name: "Threat Model"
+        spec_file: "tm-spec.md"
+        human_authored: false
+        optional: false
+      - id: SAR
+        full_name: "Security Assessment Record"
+        spec_file: "sar-spec.md"
+        human_authored: false
+        optional: false
+      - id: CER
+        full_name: "Compliance Evidence Record"
+        spec_file: "cer-spec.md"
+        human_authored: false
+        optional: true   # only when compliance mandate exists
+      - id: DAR
+        full_name: "Dependency Audit Record"
+        spec_file: "dar-spec.md"
+        human_authored: false
+        optional: false
+
+    # No single linear flow — trigger-based activation
+    artifact_flow:
+      - TM      # first: triggered by SAD frozen
+      - SAR     # second: triggered by TM frozen + code complete
+      - CER     # parallel: triggered by compliance mandate (any time)
+      - DAR     # parallel: triggered by dependency manifest available
+
+    # Internal sequential dependency (within kit)
+    internal_dependencies:
+      - upstream: TM
+        downstream: SAR
+        gate_type: "freeze"
+
+    entry_points: []
+
+    entry_from:
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [SAD]
+        description: "Frozen SAD triggers threat modeling"
+
+    triggers:
+      - artifact: TM
+        condition: "SAD frozen"
+        upstream: [EEK:SAD]
+        gate_type: "trigger"
+      - artifact: SAR
+        condition: "TM frozen and code complete"
+        upstream: [SCK:TM, EEK:ORD]
+        gate_type: "trigger"
+      - artifact: DAR
+        condition: "Dependency manifest available (code complete)"
+        upstream: [EEK:ORD]
+        gate_type: "trigger"
+      - artifact: CER
+        condition: "Compliance mandate identified"
+        upstream: [EEK:ORD]
+        gate_type: "trigger"
+
+    feeds_into:
+      - target_kit: QAK
+        artifact: TM
+        target_artifact: VP
+        description: "Security test scope (optional VP input)"
+      - target_kit: QAK
+        artifact: SAR
+        target_artifact: VP
+        description: "Security findings to verify (optional VP input)"
+      - target_kit: REK
+        artifact: SAR
+        target_artifact: RER
+        description: "Security clearance evidence for RSA"
+      - target_kit: REK
+        artifact: DAR
+        target_artifact: RER
+        description: "Dependency audit evidence for RSA"
+
+  # ─── Layer 11: Data & Configuration ──────────────────────────────────────
+
+  DCK:
+    layer: 11
+    full_name: "Data & Configuration Kit"
+    repository: "aieos-data-configuration-kit"
+    category: "cross-cutting"
+    status: "built"
+    optional: true
+    question: "Is configuration governed and are feature flags managed?"
+
+    artifacts:
+      - id: CSPEC
+        full_name: "Configuration Specification"
+        spec_file: "cspec-spec.md"
+        human_authored: false
+        optional: false
+      - id: DSR
+        full_name: "Data Schema Record"
+        spec_file: "dsr-spec.md"
+        human_authored: false
+        optional: false
+      - id: DMR
+        full_name: "Data Migration Record"
+        spec_file: "dmr-spec.md"
+        human_authored: false
+        optional: true   # only when migration needed
+      - id: FFLR
+        full_name: "Feature Flag Lifecycle Record"
+        spec_file: "fflr-spec.md"
+        human_authored: false
+        optional: true   # only when feature flags exist
+
+    artifact_flow:
+      - CSPEC
+      - DSR
+      - DMR     # optional: when DSR identifies migration
+      - FFLR    # triggered at release, not during engineering
+
+    internal_dependencies:
+      - upstream: DSR
+        downstream: DMR
+        gate_type: "freeze"
+
+    entry_points: []
+
+    entry_from:
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [TDD]
+        description: "Frozen TDD triggers config spec and data schema work"
+
+    triggers:
+      - artifact: CSPEC
+        condition: "TDD frozen"
+        upstream: [EEK:TDD]
+        gate_type: "trigger"
+      - artifact: DSR
+        condition: "TDD frozen (with data model)"
+        upstream: [EEK:TDD]
+        gate_type: "trigger"
+      - artifact: FFLR
+        condition: "Feature flags created during release"
+        upstream: [REK:RR]
+        gate_type: "trigger"
+
+    feeds_into:
+      - target_kit: REK
+        artifact: CSPEC
+        target_artifact: RP
+        description: "Config validation criteria"
+      - target_kit: RRK
+        artifact: CSPEC
+        target_artifact: SRP
+        description: "Config drift detection rules"
+      - target_kit: RRK
+        artifact: FFLR
+        target_artifact: RHR
+        description: "Stale flag alerts"
+
+  # ─── Layer 12: Platform & Infrastructure ─────────────────────────────────
+
+  PINFK:
+    layer: 12
+    full_name: "Platform & Infrastructure Kit"
+    repository: "aieos-platform-infrastructure-kit"
+    category: "cross-cutting"
+    status: "built"
+    optional: true
+    question: "What infrastructure supports it?"
+
+    artifacts:
+      - id: PDR
+        full_name: "Platform Decision Record"
+        spec_file: "pdr-spec.md"
+        human_authored: false
+        optional: false
+      - id: ISPEC
+        full_name: "Infrastructure Specification"
+        spec_file: "ispec-spec.md"
+        human_authored: false
+        optional: false
+      - id: EM
+        full_name: "Environment Matrix"
+        spec_file: "em-spec.md"
+        human_authored: false
+        optional: false
+      - id: SMR
+        full_name: "System Model Record"
+        spec_file: "smr-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - PDR
+      - ISPEC
+      - EM
+      - SMR
+
+    internal_dependencies:
+      - upstream: PDR
+        downstream: ISPEC
+        gate_type: "freeze"
+      - upstream: ISPEC
+        downstream: EM
+        gate_type: "freeze"
+      - upstream: ISPEC
+        downstream: SMR
+        gate_type: "freeze"
+
+    entry_points:
+      - PDR    # technology decision (external entry)
+
+    entry_from:
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [SAD, TDD]
+        description: "SAD/TDD technology decisions trigger platform evaluation"
+
+    triggers:
+      - artifact: PDR
+        condition: "Technology decision arises"
+        upstream: []   # no upstream artifact required — external entry
+        gate_type: "trigger"
+
+    feeds_into:
+      - target_kit: EEK
+        artifact: PDR
+        target_artifact: ACF
+        description: "Technology assumptions (already decided)"
+      - target_kit: EEK
+        artifact: ISPEC
+        target_artifact: SAD
+        description: "Deployment model constraints"
+      - target_kit: REK
+        artifact: EM
+        target_artifact: RP
+        description: "Environment promotion rules"
+
+  # ─── Layer 13: Documentation & Knowledge ─────────────────────────────────
+
+  DKK:
+    layer: 13
+    full_name: "Documentation & Knowledge Kit"
+    repository: "aieos-documentation-knowledge-kit"
+    category: "cross-cutting"
+    status: "built"
+    optional: true
+    question: "Is user-facing documentation governed?"
+
+    artifacts:
+      - id: UDR
+        full_name: "User Documentation Record"
+        spec_file: "udr-spec.md"
+        human_authored: false
+        optional: false
+      - id: ARR
+        full_name: "API Reference Record"
+        spec_file: "arr-spec.md"
+        human_authored: false
+        optional: false
+      - id: SKA
+        full_name: "Support Knowledge Article"
+        spec_file: "ska-spec.md"
+        human_authored: false
+        optional: true   # trigger-dependent
+      - id: DHR
+        full_name: "Documentation Health Review"
+        spec_file: "dhr-spec.md"
+        human_authored: false
+        optional: true   # periodic
+
+    artifact_flow:
+      - ARR     # early: triggered by TDD frozen
+      - UDR     # at release: triggered by RR frozen
+      - SKA     # on-demand: triggered by RR or PMR
+      - DHR     # periodic: aligned with RHR
+
+    entry_points: []
+
+    entry_from:
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [TDD]
+        description: "Frozen TDD triggers early API reference work"
+      rek:
+        file: "entry-from-rek.md"
+        expected_artifacts: [RR]
+        description: "Frozen RR triggers user docs and support articles"
+      odk:
+        file: "entry-from-odk.md"
+        expected_artifacts: [PMR]
+        description: "Frozen PMR triggers support knowledge articles"
+
+    triggers:
+      - artifact: ARR
+        condition: "TDD frozen (early) or RR frozen (at release)"
+        upstream: [EEK:TDD]
+        gate_type: "trigger"
+      - artifact: UDR
+        condition: "RR frozen"
+        upstream: [REK:RR]
+        gate_type: "trigger"
+      - artifact: SKA
+        condition: "RR frozen or PMR frozen or support patterns identified"
+        upstream: [REK:RR, ODK:PMR]
+        gate_type: "trigger"
+      - artifact: DHR
+        condition: "Periodic (aligned with RHR cycle)"
+        upstream: []   # time-based, requires 2+ frozen doc artifacts
+        gate_type: "trigger"
+
+    feeds_into:
+      - target_kit: IEK
+        artifact: DHR
+        target_artifact: PES
+        description: "Documentation health signal"
+
+  # ─── Layer 14: Peer Review ───────────────────────────────────────────────
+
+  PRK:
+    layer: 14
+    full_name: "Peer Review Kit"
+    repository: "aieos-peer-review-kit"
+    category: "cross-cutting"
+    status: "built"
+    optional: true
+    question: "Has this artifact been evaluated from multiple expert perspectives?"
+
+    artifacts:
+      - id: PRR
+        full_name: "Peer Review Record"
+        spec_file: "prr-spec.md"
+        human_authored: false
+        optional: false
+
+    # PRR is a single artifact type invoked at multiple review points.
+    # Each invocation is a different review lens (concept, architecture, etc.)
+    artifact_flow:
+      - PRR
+
+    entry_points: []
+
+    entry_from:
+      pik:
+        file: "entry-from-pik.md"
+        expected_artifacts: [DPRD]
+        description: "Concept review after DPRD validated"
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [SAD, TDD, WDD, ORD]
+        description: "Architecture, tech design, impl readiness, and code reviews"
+      qak:
+        file: "entry-from-qak.md"
+        expected_artifacts: [QGR]
+        description: "Integration review after QGR validated"
+      rek:
+        file: "entry-from-rek.md"
+        expected_artifacts: [RP]
+        description: "Operational readiness review after RP validated"
+      rrk:
+        file: "entry-from-rrk.md"
+        expected_artifacts: [RHR]
+        description: "Post-deployment review after RHR validated"
+      odk:
+        file: "entry-from-odk.md"
+        expected_artifacts: [PMR]
+        description: "Incident review after PMR validated"
+
+    # PRK triggers are unique: each trigger produces a PRR with a specific
+    # review lens. The lens determines which perspectives are applied.
+    triggers:
+      - artifact: PRR
+        lens: "concept"
+        condition: "DPRD validated"
+        upstream: [PIK:DPRD]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "architecture"
+        condition: "SAD validated"
+        upstream: [EEK:SAD, EEK:PRD, EEK:ACF]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "tech-design"
+        condition: "TDD validated"
+        upstream: [EEK:TDD, EEK:SAD, EEK:ACF]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "impl-readiness"
+        condition: "WDD validated"
+        upstream: [EEK:WDD, EEK:TDD]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "code-review"
+        condition: "ORD validated"
+        upstream: [EEK:ORD]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "integration"
+        condition: "QGR validated"
+        upstream: [QAK:QGR, QAK:TCR]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "ops-readiness"
+        condition: "RP validated"
+        upstream: [REK:RP, REK:RCF]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "post-deploy"
+        condition: "RHR validated"
+        upstream: [RRK:RHR, RRK:SRP]
+        gate_type: "trigger"
+      - artifact: PRR
+        lens: "incident"
+        condition: "PMR validated"
+        upstream: [ODK:PMR, ODK:INR]
+        gate_type: "trigger"
+
+    feeds_into:
+      - target_kit: "*"
+        artifact: PRR
+        target_artifact: "*"
+        description: "Multi-perspective findings must be addressed before freeze"
+
+  # ─── Layer 15: Business Process ──────────────────────────────────────────
+
+  BPK:
+    layer: 15
+    full_name: "Business Process Kit"
+    repository: "aieos-business-process-kit"
+    category: "cross-cutting"
+    status: "built"
+    optional: true
+    question: "Are affected business processes governed through the change?"
+
+    artifacts:
+      - id: PIA
+        full_name: "Process Impact Assessment"
+        spec_file: "pia-spec.md"
+        human_authored: false
+        optional: false
+      - id: TP
+        full_name: "Transition Plan"
+        spec_file: "tp-spec.md"
+        human_authored: false
+        optional: false
+      - id: RC
+        full_name: "Readiness Confirmation"
+        spec_file: "rc-spec.md"
+        human_authored: false
+        optional: false
+
+    artifact_flow:
+      - PIA
+      - TP
+      - RC
+
+    internal_dependencies:
+      - upstream: PIA
+        downstream: TP
+        gate_type: "freeze"
+      - upstream: TP
+        downstream: RC
+        gate_type: "freeze"
+
+    entry_points: []
+
+    entry_from:
+      eek:
+        file: "entry-from-eek.md"
+        expected_artifacts: [SAD, TDD]
+        description: "SAD or TDD with process impacts triggers assessment"
+
+    triggers:
+      - artifact: PIA
+        condition: "SAD or TDD frozen (with process impacts identified)"
+        upstream: [EEK:SAD, EEK:TDD]
+        gate_type: "trigger"
+
+    feeds_into:
+      - target_kit: REK
+        artifact: RC
+        target_artifact: RER
+        description: "Process readiness declaration"
+      - target_kit: REK
+        artifact: TP
+        target_artifact: RP
+        description: "Cutover schedule alignment"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEPENDENCY EDGES
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Every dependency edge in the framework, expressed as structured data.
+# This replaces the DEPENDENCY_EDGES list in framework.py.
+#
+# Edge types:
+#   freeze      — Upstream artifact must be frozen before downstream begins
+#   trigger     — Event-based activation (cross-cutting kits)
+#   escalation  — Reverse-direction re-entry (incident fix, re-discover)
+#
+# Format: { from: "KIT:ARTIFACT", to: "KIT:ARTIFACT", type: "freeze|trigger|escalation" }
+# ═════════════════════════════════════════════════════════════════════════════
+
+dependency_edges:
+
+  # ─── Pipeline sequential (cross-kit) ───────────────────────────────────
+  - { from: "SDK:PPR",   to: "PIK:WCR",   type: "freeze" }
+  - { from: "PIK:DPRD",  to: "EEK:PRD",   type: "freeze" }   # Path A (no SSK)
+  - { from: "PIK:DPRD",  to: "SSK:SOER",  type: "freeze" }
+  - { from: "SSK:SDR",   to: "EEK:PRD",   type: "freeze" }   # Path via SSK
+  - { from: "EEK:ORD",   to: "REK:RER",   type: "freeze" }
+  - { from: "EEK:ORD",   to: "QAK:QAER",  type: "freeze" }
+  - { from: "QAK:QGR",   to: "REK:RER",   type: "freeze" }   # when QAK adopted
+  - { from: "REK:RR",    to: "RRK:SRER",  type: "freeze" }
+  - { from: "RRK:RHR",   to: "IEK:ES",    type: "freeze" }   # 2+ RHRs required
+
+  # ─── Within-kit sequential (SDK) ──────────────────────────────────────
+  - { from: "SDK:CLA",   to: "SDK:PCR",   type: "freeze" }
+  - { from: "SDK:PCR",   to: "SDK:TIR",   type: "freeze" }
+  - { from: "SDK:PCR",   to: "SDK:SBR",   type: "freeze" }
+  - { from: "SDK:SBR",   to: "SDK:PPR",   type: "freeze" }
+
+  # ─── Within-kit sequential (PIK) ──────────────────────────────────────
+  - { from: "PIK:WCR",   to: "PIK:PFD",   type: "freeze" }
+  - { from: "PIK:PFD",   to: "PIK:VH",    type: "freeze" }
+  - { from: "PIK:VH",    to: "PIK:AR",    type: "freeze" }
+  - { from: "PIK:AR",    to: "PIK:EL",    type: "freeze" }
+  - { from: "PIK:EL",    to: "PIK:DPRD",  type: "freeze" }
+
+  # ─── Within-kit sequential (SSK) ──────────────────────────────────────
+  - { from: "SSK:SOER",  to: "SSK:VER",   type: "freeze" }
+  - { from: "SSK:VER",   to: "SSK:SDR",   type: "freeze" }
+
+  # ─── Within-kit sequential (EEK) ──────────────────────────────────────
+  - { from: "EEK:KER",   to: "EEK:PRD",   type: "freeze" }
+  - { from: "EEK:PRD",   to: "EEK:ACF",   type: "freeze" }
+  - { from: "EEK:PRD",   to: "EEK:SAD",   type: "freeze" }
+  - { from: "EEK:ACF",   to: "EEK:DKR",   type: "freeze" }
+  - { from: "EEK:DKR",   to: "EEK:SAD",   type: "freeze" }   # when DKR created
+  - { from: "EEK:ACF",   to: "EEK:TDD",   type: "freeze" }
+  - { from: "EEK:SAD",   to: "EEK:TDD",   type: "freeze" }
+  - { from: "EEK:ACF",   to: "EEK:DCF",   type: "freeze" }
+  - { from: "EEK:SAD",   to: "EEK:DCF",   type: "freeze" }
+  - { from: "EEK:TDD",   to: "EEK:WDD",   type: "freeze" }
+  - { from: "EEK:DCF",   to: "EEK:WDD",   type: "freeze" }
+  - { from: "EEK:WDD",   to: "EEK:ORD",   type: "freeze" }
+
+  # ─── Within-kit sequential (QAK) ──────────────────────────────────────
+  - { from: "QAK:QAER",  to: "QAK:VP",    type: "freeze" }
+  - { from: "QAK:VP",    to: "QAK:TCR",   type: "freeze" }
+  - { from: "QAK:TCR",   to: "QAK:QGR",   type: "freeze" }
+
+  # ─── Within-kit sequential (REK) ──────────────────────────────────────
+  - { from: "REK:RER",   to: "REK:RCF",   type: "freeze" }
+  - { from: "REK:RCF",   to: "REK:RSA",   type: "freeze" }
+  - { from: "REK:RSA",   to: "REK:RP",    type: "freeze" }
+  - { from: "REK:RP",    to: "REK:RR",    type: "freeze" }
+
+  # ─── Within-kit sequential (RRK) ──────────────────────────────────────
+  - { from: "RRK:SRER",  to: "RRK:SRP",   type: "freeze" }
+  - { from: "RRK:SRP",   to: "RRK:RHR",   type: "freeze" }
+
+  # ─── Within-kit sequential (ODK) ──────────────────────────────────────
+  - { from: "ODK:DCR",   to: "ODK:INR",   type: "freeze" }
+  - { from: "ODK:INR",   to: "ODK:PMR",   type: "freeze" }
+
+  # ─── Within-kit sequential (PINFK) ────────────────────────────────────
+  - { from: "PINFK:PDR",   to: "PINFK:ISPEC", type: "freeze" }
+  - { from: "PINFK:ISPEC", to: "PINFK:EM",    type: "freeze" }
+  - { from: "PINFK:ISPEC", to: "PINFK:SMR",   type: "freeze" }
+
+  # ─── Within-kit sequential (SCK) ──────────────────────────────────────
+  - { from: "SCK:TM",    to: "SCK:SAR",   type: "freeze" }
+
+  # ─── Within-kit sequential (BPK) ──────────────────────────────────────
+  - { from: "BPK:PIA",   to: "BPK:TP",    type: "freeze" }
+  - { from: "BPK:TP",    to: "BPK:RC",    type: "freeze" }
+
+  # ─── Cross-cutting triggers ───────────────────────────────────────────
+  - { from: "EEK:SAD",   to: "SCK:TM",    type: "trigger" }
+  - { from: "EEK:ORD",   to: "SCK:DAR",   type: "trigger" }
+  - { from: "EEK:ORD",   to: "SCK:CER",   type: "trigger" }
+  - { from: "EEK:TDD",   to: "DCK:CSPEC", type: "trigger" }
+  - { from: "EEK:TDD",   to: "DCK:DSR",   type: "trigger" }
+  - { from: "DCK:DSR",   to: "DCK:DMR",   type: "trigger" }
+  - { from: "EEK:TDD",   to: "DKK:ARR",   type: "trigger" }
+  - { from: "REK:RR",    to: "DCK:FFLR",  type: "trigger" }
+  - { from: "REK:RR",    to: "DKK:UDR",   type: "trigger" }
+  - { from: "REK:RR",    to: "DKK:SKA",   type: "trigger" }
+  - { from: "ODK:PMR",   to: "DKK:SKA",   type: "trigger" }
+  - { from: "EEK:SAD",   to: "BPK:PIA",   type: "trigger" }
+  - { from: "EEK:TDD",   to: "BPK:PIA",   type: "trigger" }
+
+  # ─── PRK triggers (peer review at validation points) ──────────────────
+  - { from: "PIK:DPRD",  to: "PRK:PRR",   type: "trigger" }
+  - { from: "EEK:SAD",   to: "PRK:PRR",   type: "trigger" }
+  - { from: "EEK:TDD",   to: "PRK:PRR",   type: "trigger" }
+  - { from: "EEK:WDD",   to: "PRK:PRR",   type: "trigger" }
+  - { from: "EEK:ORD",   to: "PRK:PRR",   type: "trigger" }
+  - { from: "QAK:QGR",   to: "PRK:PRR",   type: "trigger" }
+  - { from: "REK:RP",    to: "PRK:PRR",   type: "trigger" }
+  - { from: "RRK:RHR",   to: "PRK:PRR",   type: "trigger" }
+  - { from: "ODK:PMR",   to: "PRK:PRR",   type: "trigger" }
+
+  # ─── Escalation paths (reverse direction) ─────────────────────────────
+  - { from: "RRK:IR",    to: "EEK:KER",   type: "escalation" }   # T1: code defect
+  - { from: "RRK:RHR",   to: "PIK:WCR",   type: "escalation" }   # T2: recurring pattern
+  - { from: "REK:RR",    to: "EEK:KER",   type: "escalation" }   # T3: rollback code defect
+  - { from: "REK:RR",    to: "PIK:WCR",   type: "escalation" }   # T4: rollback wrong feature
+  - { from: "RRK:IR",    to: "ODK:DCR",   type: "escalation" }   # T5: SEV1/2 → ODK
+  - { from: "IEK:ES",    to: "PIK:WCR",   type: "escalation" }   # T6: re-discover
+  - { from: "IEK:ES",    to: "SDK:CLA",   type: "escalation" }   # T6a: re-discover updates CLA
+  - { from: "IEK:ES",    to: "SDK:SBR",   type: "escalation" }   # T6b: new strategic question
+  - { from: "ODK:PMR",   to: "EEK:KER",   type: "trigger" }      # incident fix path
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ENTRY POINTS
+# ═════════════════════════════════════════════════════════════════════════════
+# Artifacts that can be entered from outside the AIEOS framework.
+
+entry_points:
+  - artifact: "SDK:CLA"
+    description: "Roadmap planning — retroactive capability onboarding"
+  - artifact: "SDK:SBR"
+    description: "Strategic bet — direct entry"
+  - artifact: "PIK:WCR"
+    description: "New work request — discovery entry"
+  - artifact: "EEK:KER"
+    description: "Path B enhancement — well-understood work"
+  - artifact: "ODK:DCR"
+    description: "Production incident (SEV1/2)"
+  - artifact: "PINFK:PDR"
+    description: "Technology decision — no upstream artifact required"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SYNCHRONIZED FILES
+# ═════════════════════════════════════════════════════════════════════════════
+# Files that must be byte-identical across multiple repos.
+# canonical: the authoritative source
+# copies: locations that must match
+
+synchronized_files:
+  - name: "governance-model.md"
+    canonical: "aieos-governance-foundation/governance-model.md"
+    copies:
+      - "aieos-strategic-direction-kit/docs/governance-model.md"
+      - "aieos-product-intelligence-kit/docs/governance-model.md"
+      - "aieos-solution-sourcing-kit/docs/governance-model.md"
+      - "aieos-engineering-execution/docs/governance-model.md"
+      - "aieos-release-exposure-kit/docs/governance-model.md"
+      - "aieos-reliability-resilience-kit/docs/governance-model.md"
+      - "aieos-insight-evolution-kit/docs/governance-model.md"
+      - "aieos-operational-diagnostics-kit/docs/governance-model.md"
+      - "aieos-quality-assurance-kit/docs/governance-model.md"
+      - "aieos-security-compliance-kit/docs/governance-model.md"
+      - "aieos-data-configuration-kit/docs/governance-model.md"
+      - "aieos-platform-infrastructure-kit/docs/governance-model.md"
+      - "aieos-documentation-knowledge-kit/docs/governance-model.md"
+      - "aieos-peer-review-kit/docs/governance-model.md"
+      - "aieos-business-process-kit/docs/governance-model.md"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# INITIATIVE PRESETS
+# ═════════════════════════════════════════════════════════════════════════════
+# Golden paths for common initiative types.
+
+presets:
+  - name: "New Feature"
+    entry_point: "PIK:WCR"
+    required_kits: [PIK, EEK, QAK, SCK, DCK, PINFK, DKK, REK, RRK, IEK]
+    optional_kits: [SDK, ODK, SSK, PRK, BPK]
+
+  - name: "Enhancement"
+    entry_point: "EEK:KER"
+    required_kits: [EEK, REK]
+    optional_kits: [SDK, PIK, QAK, SCK, DCK, DKK, RRK, IEK, PRK, BPK]
+
+  - name: "Compliance and Regulatory"
+    entry_point: "PIK:WCR"
+    required_kits: [PIK, EEK, SCK, QAK, REK, RRK]
+    optional_kits: [SDK, IEK, ODK, SSK, PRK, BPK]
+
+  - name: "Performance and Reliability Fix"
+    entry_point: "ODK:DCR"
+    required_kits: [ODK, EEK, REK, RRK]
+    optional_kits: [QAK, SCK, DKK, PRK]
+
+  - name: "Exploratory Research"
+    entry_point: "PIK:WCR"
+    required_kits: [PIK]
+    optional_kits: []
