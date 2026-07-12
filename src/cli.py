@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
@@ -31,13 +32,26 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    print(
-        "run: the harness driver is not yet wired into the dark factory "
-        "(staged integration seam -- see src/driver.py). Use `plan` to inspect "
-        "the walk order.",
-        file=sys.stderr,
+    """Drive an initiative through the conductor against the real harness CLI."""
+    import json
+
+    from src.conductor import Conductor, ConductorStatus
+    from src.subprocess_driver import SubprocessHarnessDriver
+
+    manifest = load_manifest(Path(args.manifest))
+    order = build_walk_order(manifest, _kits_for(manifest, args.preset))
+    driver = SubprocessHarnessDriver(
+        shlex.split(args.harness_cmd),
+        Path(args.aieos_root),
+        cwd=Path(args.harness_cwd) if args.harness_cwd else None,
     )
-    return 2
+    state = Conductor(driver, Path(args.initiative), order).run()
+    print(json.dumps({
+        "status": state.status,
+        "current": state.current,
+        "completed": state.completed,
+    }))
+    return 1 if state.status == ConductorStatus.HALTED.value else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -51,10 +65,18 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--preset", required=True, help="Preset name (e.g. Enhancement)")
     plan.add_argument("--include-optional", action="store_true")
 
-    run = sub.add_parser("run", help="Drive an initiative (needs harness driver)")
+    run = sub.add_parser("run", help="Drive an initiative via the harness CLI")
     run.add_argument("--initiative", required=True)
     run.add_argument("--manifest", required=True)
     run.add_argument("--preset", required=True)
+    run.add_argument("--aieos-root", required=True, help="Kit files root for the harness")
+    run.add_argument(
+        "--harness-cmd", default="harness",
+        help="Command to invoke the harness CLI (default: 'harness')",
+    )
+    run.add_argument(
+        "--harness-cwd", default=None, help="Working dir for the harness command",
+    )
 
     args = parser.parse_args(argv)
     handlers = {"plan": cmd_plan, "run": cmd_run}

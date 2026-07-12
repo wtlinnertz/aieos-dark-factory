@@ -31,7 +31,12 @@ a separate repo; if the conductor reaches past the facade, the repo was a mistak
 dark-factory plan --manifest <kit-manifest.yml> --preset Enhancement
 ```
 
-`run` awaits the harness-driver integration seam (see `src/driver.py`).
+```
+dark-factory run --initiative <path> --manifest <kit-manifest.yml> \
+  --preset Enhancement --aieos-root <kits-root> --harness-cmd "harness"
+```
+
+`run` drives the initiative through the conductor against the **real harness CLI** via `SubprocessHarnessDriver` (the packaging seam — both repos use `src` as their import root, so the conductor reaches the harness through its CLI, mirroring ADR-0003, rather than an in-process import that would collide).
 
 ## Staged (next slices)
 
