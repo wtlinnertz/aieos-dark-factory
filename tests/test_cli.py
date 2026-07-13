@@ -102,3 +102,18 @@ class TestAndonCommands:
         from src.decision_register import DecisionRegister
         reg = DecisionRegister(tmp_path / ".aieos" / "decision-register.jsonl")
         assert reg.entries()[-1].entry_type == "CLEAR_FAULT"
+
+
+class TestCheckLivenessCommand:
+    def test_trips_on_stale(self, tmp_path, capsys):
+        import json as _j
+        d = tmp_path / ".aieos"
+        d.mkdir(parents=True)
+        (d / "conductor-state.json").write_text(_j.dumps({"heartbeat": "2000-01-01T00:00:00Z"}))
+        rc = main(["check-liveness", "--initiative", str(tmp_path), "--max-idle", "60"])
+        assert rc == 1
+        assert json.loads(capsys.readouterr().out)["tripped"] is True
+
+    def test_ok_when_no_state(self, tmp_path, capsys):
+        rc = main(["check-liveness", "--initiative", str(tmp_path)])
+        assert rc == 0

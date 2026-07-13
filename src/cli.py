@@ -76,6 +76,17 @@ def cmd_clear_fault(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_check_liveness(args: argparse.Namespace) -> int:
+    """Trip HALTED if the conductor heartbeat is stale (andon backstop)."""
+    import json
+
+    from src.andon import check_liveness
+
+    tripped = check_liveness(Path(args.initiative), args.max_idle)
+    print(json.dumps({"tripped": tripped, "max_idle_seconds": args.max_idle}))
+    return 1 if tripped else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="AIEOS dark factory -- autonomous pipeline conductor"
@@ -110,12 +121,17 @@ def main(argv: list[str] | None = None) -> int:
     clear_p.add_argument("--by", required=True, help="Human identity clearing the fault")
     clear_p.add_argument("--note", default=None)
 
+    live_p = sub.add_parser("check-liveness", help="Trip if the conductor heartbeat is stale (andon)")
+    live_p.add_argument("--initiative", required=True)
+    live_p.add_argument("--max-idle", type=int, default=300, help="Max idle seconds before tripping")
+
     args = parser.parse_args(argv)
     handlers = {
         "plan": cmd_plan,
         "run": cmd_run,
         "resume": cmd_resume,
         "clear-fault": cmd_clear_fault,
+        "check-liveness": cmd_check_liveness,
     }
     return handlers[args.command](args)
 
