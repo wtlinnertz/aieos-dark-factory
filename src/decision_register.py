@@ -28,6 +28,7 @@ class EntryType(str, Enum):
     ESCALATION = "ESCALATION"
     RESUME = "RESUME"
     CLEAR_FAULT = "CLEAR_FAULT"
+    HALT = "HALT"
 
 
 @dataclass

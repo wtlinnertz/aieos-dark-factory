@@ -25,6 +25,7 @@ from typing import Callable, Optional
 
 from src.decision_register import DecisionRegister, EntryType
 from src.driver import HarnessDriver, LifecycleResult
+from src.summon import Summoner
 
 
 class ConductorStatus(str, Enum):
@@ -69,6 +70,7 @@ class Conductor:
         state_path: Optional[Path] = None,
         lock_ok: Optional[Callable[[], bool]] = None,
         halt_check: Callable[[Path], bool] = _halt_present,
+        summoner: Optional[Summoner] = None,
     ) -> None:
         self._driver = driver
         self._initiative = Path(initiative_path)
@@ -82,6 +84,8 @@ class Conductor:
         # FR-019 lock check (injected). Returns True if we still own the lock.
         self._lock_ok = lock_ok
         self._halt_check = halt_check
+        # Andon summon channel (ADR-0004); None = no summon.
+        self._summoner = summoner
 
     # -- state persistence --------------------------------------------------
     def _load_state(self) -> ConductorState:
@@ -95,6 +99,10 @@ class Conductor:
 
     def _artifact_type(self, node: str) -> str:
         return node.split(":", 1)[1]
+
+    def _summon(self, payload: dict) -> None:
+        if self._summoner is not None:
+            self._summoner.summon({"initiative": str(self._initiative), **payload})
 
     # -- main loop ----------------------------------------------------------
     def run(self) -> ConductorState:
@@ -122,6 +130,7 @@ class Conductor:
             if self._halt_check(self._initiative):
                 state.status = ConductorStatus.HALTED.value
                 state.current = node
+                self._summon({"event": "halt", "artifact": node})
                 self._save(state)
                 return state
 
@@ -129,6 +138,7 @@ class Conductor:
             if self._lock_ok is not None and not self._lock_ok():
                 state.status = ConductorStatus.HALTED.value
                 state.current = node
+                self._summon({"event": "lock_lost", "artifact": node})
                 self._save(state)
                 return state
 
@@ -143,6 +153,11 @@ class Conductor:
                 )
                 state.status = ConductorStatus.ESCALATED.value
                 state.current = node
+                self._summon({
+                    "event": "escalation",
+                    "artifact": node,
+                    "reason": "convergence_exhausted",
+                })
                 self._save(state)
                 return state
 

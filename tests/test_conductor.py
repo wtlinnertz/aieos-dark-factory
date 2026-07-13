@@ -136,3 +136,32 @@ class TestCrashResumption:
         state = Conductor(d, tmp_path, ORDER).run()
         assert "EEK:KER" in state.completed
         assert state.current == "EEK:PRD"
+
+
+from src.summon import LogSummoner  # noqa: E402
+
+
+class TestConductorSummon:
+    def test_summons_on_escalation(self, tmp_path):
+        d = FakeDriver(results={"KER": LifecycleResult.ESCALATION_NEEDED})
+        summoner = LogSummoner()
+        Conductor(d, tmp_path, ["EEK:KER"], summoner=summoner).run()
+        assert summoner.summons[-1]["event"] == "escalation"
+        assert summoner.summons[-1]["artifact"] == "EEK:KER"
+
+    def test_summons_on_halt_sentinel(self, tmp_path):
+        (tmp_path / ".aieos").mkdir(parents=True)
+        (tmp_path / ".aieos" / "halt").write_text("{}")
+        summoner = LogSummoner()
+        Conductor(FakeDriver(), tmp_path, ["EEK:KER"], summoner=summoner).run()
+        assert summoner.summons[-1]["event"] == "halt"
+
+    def test_summons_on_lost_lock(self, tmp_path):
+        summoner = LogSummoner()
+        Conductor(FakeDriver(), tmp_path, ["EEK:KER"], lock_ok=lambda: False, summoner=summoner).run()
+        assert summoner.summons[-1]["event"] == "lock_lost"
+
+    def test_no_summoner_is_fine(self, tmp_path):
+        d = FakeDriver(results={"KER": LifecycleResult.ESCALATION_NEEDED})
+        state = Conductor(d, tmp_path, ["EEK:KER"]).run()
+        assert state.status == ConductorStatus.ESCALATED.value

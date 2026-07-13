@@ -71,3 +71,37 @@ class TestChainIntegrity:
         _halt(tmp_path)
         resume(tmp_path, "Todd")
         assert _register(tmp_path).verify_chain() is True
+
+
+from src.andon import Severity, trip  # noqa: E402
+from src.summon import LogSummoner  # noqa: E402
+
+
+class TestTrip:
+    def test_writes_halt_records_and_summons(self, tmp_path):
+        summoner = LogSummoner()
+        payload = trip(
+            tmp_path, "invariant_failed", Severity.FAULTED,
+            summoner=summoner, details={"gate": "freeze_before_promote"},
+        )
+        assert payload["severity"] == "FAULTED"
+        assert halt_present(tmp_path) is True
+        entry = _register(tmp_path).entries()[-1]
+        assert entry.entry_type == "HALT"
+        assert entry.payload["severity"] == "FAULTED"
+        assert summoner.summons[-1]["reason"] == "invariant_failed"
+
+    def test_halted_severity_is_resumable(self, tmp_path):
+        trip(tmp_path, "budget_watch", Severity.HALTED)
+        assert halt_present(tmp_path) is True
+        # a HALTED trip is cleared by resume
+        assert resume(tmp_path, "Todd") is True
+
+    def test_trip_without_summoner_ok(self, tmp_path):
+        trip(tmp_path, "x", Severity.HALTED)
+        assert halt_present(tmp_path) is True
+
+    def test_chain_valid_after_trip_and_resume(self, tmp_path):
+        trip(tmp_path, "x", Severity.HALTED)
+        resume(tmp_path, "Todd")
+        assert _register(tmp_path).verify_chain() is True
