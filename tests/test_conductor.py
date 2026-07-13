@@ -165,3 +165,29 @@ class TestConductorSummon:
         d = FakeDriver(results={"KER": LifecycleResult.ESCALATION_NEEDED})
         state = Conductor(d, tmp_path, ["EEK:KER"]).run()
         assert state.status == ConductorStatus.ESCALATED.value
+
+
+class TestHardTrip:
+    def test_driver_failure_faults_and_stands_down(self, tmp_path):
+        from src.summon import LogSummoner
+
+        class BoomDriver(FakeDriver):
+            def run_artifact_lifecycle(self, artifact_type, initiative_path):
+                raise RuntimeError("harness crashed")
+
+        summoner = LogSummoner()
+        state = Conductor(BoomDriver(), tmp_path, ["EEK:KER"], summoner=summoner).run()
+        assert state.status == ConductorStatus.HALTED.value
+        # halt sentinel written + FAULT recorded + summoned
+        assert (tmp_path / ".aieos" / "halt").exists()
+        reg = DecisionRegister(tmp_path / ".aieos" / "decision-register.jsonl")
+        last = reg.entries()[-1]
+        assert last.entry_type == "HALT"
+        assert last.payload["severity"] == "FAULTED"
+        assert summoner.summons[-1]["severity"] == "FAULTED"
+
+    def test_heartbeat_written_on_save(self, tmp_path):
+        Conductor(FakeDriver(), tmp_path, ["EEK:KER"]).run()  # parks -> saves
+        import json as _j
+        data = _j.loads((tmp_path / ".aieos" / "conductor-state.json").read_text())
+        assert data["heartbeat"].endswith("Z")

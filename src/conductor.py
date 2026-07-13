@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional
@@ -44,6 +45,7 @@ class ConductorState:
     status: str = ConductorStatus.RUNNING.value
     current: Optional[str] = None
     frozen_count_at_park: int = 0
+    heartbeat: str = ""
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -94,6 +96,7 @@ class Conductor:
         return ConductorState(initiative=str(self._initiative), order=list(self._order))
 
     def _save(self, state: ConductorState) -> None:
+        state.heartbeat = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self._state_path.write_text(state.to_json())
 
@@ -142,9 +145,26 @@ class Conductor:
                 self._save(state)
                 return state
 
-            result = self._driver.run_artifact_lifecycle(
-                self._artifact_type(node), self._initiative
-            )
+            try:
+                result = self._driver.run_artifact_lifecycle(
+                    self._artifact_type(node), self._initiative
+                )
+            except Exception as exc:
+                # Hard trip: a driver/harness failure is a governance-relevant
+                # fault, not a clean stop. Stand the run down FAULTED + summon.
+                from src.andon import Severity, trip
+                trip(
+                    self._initiative,
+                    f"driver_failure: {exc}",
+                    Severity.FAULTED,
+                    register=self._register,
+                    summoner=self._summoner,
+                    details={"artifact": node},
+                )
+                state.status = ConductorStatus.HALTED.value
+                state.current = node
+                self._save(state)
+                return state
 
             if result == LifecycleResult.ESCALATION_NEEDED:
                 self._register.append(

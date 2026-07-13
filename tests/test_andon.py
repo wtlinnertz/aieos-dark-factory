@@ -121,3 +121,40 @@ class TestTripStatusWriter:
         writes = []
         trip(tmp_path, "x", Severity.HALTED, status_writer=lambda a, s: writes.append((a, s)))
         assert writes == []  # no artifact_id -> no status write
+
+
+from datetime import datetime, timezone  # noqa: E402
+
+from src.andon import check_liveness  # noqa: E402
+
+
+def _state_with_heartbeat(tmp_path, hb: str):
+    import json
+    d = tmp_path / ".aieos"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "conductor-state.json").write_text(json.dumps({"heartbeat": hb}))
+
+
+class TestLiveness:
+    T = datetime(2026, 7, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+    def test_trips_when_stale(self, tmp_path):
+        _state_with_heartbeat(tmp_path, "2026-07-12T11:00:00Z")  # 1h old
+        assert check_liveness(tmp_path, 300, now=self.T) is True
+        assert halt_present(tmp_path) is True
+        assert _register(tmp_path).entries()[-1].entry_type == "HALT"
+
+    def test_ok_when_fresh(self, tmp_path):
+        _state_with_heartbeat(tmp_path, "2026-07-12T11:59:00Z")  # 60s old
+        assert check_liveness(tmp_path, 300, now=self.T) is False
+        assert halt_present(tmp_path) is False
+
+    def test_no_state_returns_false(self, tmp_path):
+        assert check_liveness(tmp_path, 300, now=self.T) is False
+
+    def test_no_heartbeat_returns_false(self, tmp_path):
+        import json
+        d = tmp_path / ".aieos"
+        d.mkdir(parents=True)
+        (d / "conductor-state.json").write_text(json.dumps({}))
+        assert check_liveness(tmp_path, 300, now=self.T) is False

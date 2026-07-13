@@ -139,3 +139,44 @@ def trip(
     if summoner is not None:
         summoner.summon(payload)
     return payload
+
+
+def _parse_ts(ts: str) -> datetime:
+    return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def check_liveness(
+    initiative_path: Path,
+    max_idle_seconds: int,
+    *,
+    now: Optional[datetime] = None,
+    register: Optional[DecisionRegister] = None,
+    summoner: Optional[Summoner] = None,
+) -> bool:
+    """Silent-failure backstop: trip HALTED if the conductor has gone quiet.
+
+    Reads the conductor state's ``heartbeat`` (refreshed on every step). If more
+    than ``max_idle_seconds`` have elapsed since it, the run is presumed stuck --
+    stand it down (HALTED, resumable) and summon. Returns True if it tripped.
+    Returns False when there is no state/heartbeat or the run is still live.
+    """
+    now = now or datetime.now(timezone.utc)
+    state_path = Path(initiative_path) / ".aieos" / "conductor-state.json"
+    if not state_path.exists():
+        return False
+    data = json.loads(state_path.read_text())
+    hb = data.get("heartbeat")
+    if not hb:
+        return False
+    idle = (now - _parse_ts(hb)).total_seconds()
+    if idle <= max_idle_seconds:
+        return False
+    trip(
+        initiative_path,
+        f"liveness_timeout: idle {int(idle)}s > {max_idle_seconds}s",
+        Severity.HALTED,
+        register=register,
+        summoner=summoner,
+        details={"idle_seconds": int(idle)},
+    )
+    return True
