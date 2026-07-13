@@ -77,3 +77,7 @@ class HarnessDriver(Protocol):
     def apply_freeze_decision(
         self, decision: FreezeGateDecision
     ) -> FreezeResult: ...
+
+    def mark_status(
+        self, artifact_id: str, status: str, initiative_path: Path
+    ) -> None: ...

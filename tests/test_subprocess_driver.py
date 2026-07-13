@@ -113,3 +113,16 @@ class TestRealSubprocess:
         state = Conductor(d, init, ["EEK:KER"]).run()
         assert state.status == ConductorStatus.PARKED_AT_GATE.value
         assert state.current == "EEK:KER"
+
+
+class TestMarkStatus:
+    def test_mark_status_invokes_harness(self, tmp_path):
+        sink = []
+        def runner(cmd, capture_output=True, text=True, cwd=None):
+            sink.append(cmd)
+            return _Proc(stdout=json.dumps({"status": "FAULTED", "artifact": "A", "path": "p"}))
+        d = SubprocessHarnessDriver(["harness"], tmp_path, runner=runner)
+        d.mark_status("EEK:PRD", "FAULTED", tmp_path / "init")
+        cmd = sink[0]
+        assert "mark-status" in cmd and "--status" in cmd and "FAULTED" in cmd
+        assert "EEK:PRD" in cmd
