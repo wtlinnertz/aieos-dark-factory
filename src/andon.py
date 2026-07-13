@@ -20,7 +20,7 @@ import json
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from src.decision_register import DecisionRegister, EntryType
 from src.summon import Summoner
@@ -108,6 +108,8 @@ def trip(
     register: Optional[DecisionRegister] = None,
     summoner: Optional[Summoner] = None,
     details: Optional[dict] = None,
+    artifact_id: Optional[str] = None,
+    status_writer: Optional[Callable[[str, str], None]] = None,
 ) -> dict:
     """Stand a run down (andon trip): write ``.aieos/halt``, record a HALT entry,
     and summon a human. HALTED = clean stop (resumable via ``resume``); FAULTED =
@@ -130,6 +132,10 @@ def trip(
         "INITIATIVE",
         {"reason": reason, "severity": severity.value},
     )
+    # Reflect the fault on the artifact's canonical Document Control status
+    # (HALTED/FAULTED) via the harness writer, when an artifact + writer are given.
+    if artifact_id and status_writer is not None:
+        status_writer(artifact_id, severity.value)
     if summoner is not None:
         summoner.summon(payload)
     return payload

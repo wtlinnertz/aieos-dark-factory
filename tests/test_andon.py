@@ -105,3 +105,19 @@ class TestTrip:
         trip(tmp_path, "x", Severity.HALTED)
         resume(tmp_path, "Todd")
         assert _register(tmp_path).verify_chain() is True
+
+
+class TestTripStatusWriter:
+    def test_trip_writes_artifact_status(self, tmp_path):
+        writes = []
+        trip(
+            tmp_path, "invariant_failed", Severity.FAULTED,
+            artifact_id="EEK:SAD",
+            status_writer=lambda aid, st: writes.append((aid, st)),
+        )
+        assert writes == [("EEK:SAD", "FAULTED")]
+
+    def test_trip_without_artifact_skips_status_write(self, tmp_path):
+        writes = []
+        trip(tmp_path, "x", Severity.HALTED, status_writer=lambda a, s: writes.append((a, s)))
+        assert writes == []  # no artifact_id -> no status write

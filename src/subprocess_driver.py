@@ -85,6 +85,19 @@ class SubprocessHarnessDriver:
             frozen_count=data.get("frozen_count", 0),
         )
 
+    def mark_status(
+        self, artifact_id: str, status: str, initiative_path: Path
+    ) -> None:
+        """Write an artifact's andon fault status (HALTED/FAULTED) via the harness
+        `mark-status` CLI. The harness refuses anything but HALTED/FAULTED, so this
+        can never write FROZEN."""
+        self._invoke([
+            "mark-status",
+            "--initiative", str(initiative_path),
+            "--artifact", artifact_id,
+            "--status", status,
+        ])
+
     def apply_freeze_decision(self, decision: FreezeGateDecision) -> FreezeResult:
         raise NotImplementedError(
             "the dark factory never writes FROZEN; freeze via the console/harness"
