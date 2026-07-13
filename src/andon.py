@@ -16,10 +16,19 @@ whole point: the andon must never become a backdoor to promotion.
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 from src.decision_register import DecisionRegister, EntryType
+from src.summon import Summoner
+
+
+class Severity(str, Enum):
+    HALTED = "HALTED"   # clean stop, resumable on clear
+    FAULTED = "FAULTED"  # governance breach, needs a recorded human clear
 
 
 def _halt_path(initiative_path: Path) -> Path:
@@ -89,3 +98,38 @@ def clear_fault(
         halt.unlink()
         return True
     return False
+
+
+def trip(
+    initiative_path: Path,
+    reason: str,
+    severity: Severity,
+    *,
+    register: Optional[DecisionRegister] = None,
+    summoner: Optional[Summoner] = None,
+    details: Optional[dict] = None,
+) -> dict:
+    """Stand a run down (andon trip): write ``.aieos/halt``, record a HALT entry,
+    and summon a human. HALTED = clean stop (resumable via ``resume``); FAULTED =
+    governance breach (needs ``clear_fault``). Never a freeze -- it never routes
+    through ``apply_freeze_decision``. Returns the halt payload.
+    """
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = {
+        "event": "trip",
+        "reason": reason,
+        "severity": severity.value,
+        "at": now,
+        "details": details or {},
+    }
+    halt = _halt_path(initiative_path)
+    halt.parent.mkdir(parents=True, exist_ok=True)
+    halt.write_text(json.dumps(payload, indent=2))
+    _register_for(initiative_path, register).append(
+        EntryType.HALT,
+        "INITIATIVE",
+        {"reason": reason, "severity": severity.value},
+    )
+    if summoner is not None:
+        summoner.summon(payload)
+    return payload
