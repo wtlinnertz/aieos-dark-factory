@@ -27,6 +27,7 @@ class EntryType(str, Enum):
     FREEZE_REQUEST = "FREEZE_REQUEST"
     ESCALATION = "ESCALATION"
     RESUME = "RESUME"
+    CLEAR_FAULT = "CLEAR_FAULT"
 
 
 @dataclass

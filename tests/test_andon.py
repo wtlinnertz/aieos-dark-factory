@@ -1,0 +1,73 @@
+"""Tests for andon resume / clear-fault (ADR-0004)."""
+
+import pytest
+
+from src.andon import clear_fault, halt_present, resume
+from src.decision_register import DecisionRegister
+
+
+def _halt(tmp_path):
+    d = tmp_path / ".aieos"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "halt").write_text('{"reason":"stale_lock_takeover"}')
+
+
+def _register(tmp_path):
+    return DecisionRegister(tmp_path / ".aieos" / "decision-register.jsonl")
+
+
+class TestResume:
+    def test_clears_sentinel_and_records(self, tmp_path):
+        _halt(tmp_path)
+        assert halt_present(tmp_path) is True
+        assert resume(tmp_path, "Todd") is True
+        assert halt_present(tmp_path) is False
+        entries = _register(tmp_path).entries()
+        assert entries[-1].entry_type == "RESUME"
+        assert entries[-1].payload["cleared_by"] == "Todd"
+
+    def test_no_halt_returns_false_and_records_nothing(self, tmp_path):
+        (tmp_path / ".aieos").mkdir(parents=True)
+        assert resume(tmp_path, "Todd") is False
+        assert _register(tmp_path).entries() == []
+
+    def test_requires_cleared_by(self, tmp_path):
+        _halt(tmp_path)
+        with pytest.raises(ValueError, match="cleared_by"):
+            resume(tmp_path, "  ")
+
+    def test_never_freezes(self, tmp_path):
+        # resume must not write any FROZEN status anywhere; it only clears the
+        # sentinel + records a RESUME. (No sdlc artifacts are touched.)
+        _halt(tmp_path)
+        resume(tmp_path, "Todd")
+        assert not (tmp_path / "docs").exists()
+
+
+class TestClearFault:
+    def test_records_clear_and_removes_sentinel(self, tmp_path):
+        _halt(tmp_path)
+        assert clear_fault(tmp_path, "Todd", note="investigated") is True
+        assert halt_present(tmp_path) is False
+        entries = _register(tmp_path).entries()
+        assert entries[-1].entry_type == "CLEAR_FAULT"
+        assert entries[-1].payload["note"] == "investigated"
+
+    def test_records_even_without_sentinel(self, tmp_path):
+        (tmp_path / ".aieos").mkdir(parents=True)
+        # governance clear is recorded regardless; sentinel_removed False
+        assert clear_fault(tmp_path, "Todd") is False
+        assert _register(tmp_path).entries()[-1].entry_type == "CLEAR_FAULT"
+
+    def test_requires_cleared_by(self, tmp_path):
+        with pytest.raises(ValueError, match="cleared_by"):
+            clear_fault(tmp_path, "")
+
+
+class TestChainIntegrity:
+    def test_register_chain_valid_after_andon(self, tmp_path):
+        _halt(tmp_path)
+        clear_fault(tmp_path, "Todd")
+        _halt(tmp_path)
+        resume(tmp_path, "Todd")
+        assert _register(tmp_path).verify_chain() is True

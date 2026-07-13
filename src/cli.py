@@ -54,6 +54,28 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 1 if state.status == ConductorStatus.HALTED.value else 0
 
 
+def cmd_resume(args: argparse.Namespace) -> int:
+    """Clear a HALTED run (andon resume). Not a freeze; records to the register."""
+    import json
+
+    from src.andon import resume
+
+    cleared = resume(Path(args.initiative), args.by, note=args.note or "")
+    print(json.dumps({"resumed": cleared, "cleared_by": args.by}))
+    return 0 if cleared else 1
+
+
+def cmd_clear_fault(args: argparse.Namespace) -> int:
+    """Record a human clear for a FAULTED run (andon), then drop the sentinel."""
+    import json
+
+    from src.andon import clear_fault
+
+    cleared = clear_fault(Path(args.initiative), args.by, note=args.note or "")
+    print(json.dumps({"cleared": True, "sentinel_removed": cleared, "cleared_by": args.by}))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="AIEOS dark factory -- autonomous pipeline conductor"
@@ -78,8 +100,23 @@ def main(argv: list[str] | None = None) -> int:
         "--harness-cwd", default=None, help="Working dir for the harness command",
     )
 
+    resume_p = sub.add_parser("resume", help="Clear a HALTED run (andon)")
+    resume_p.add_argument("--initiative", required=True)
+    resume_p.add_argument("--by", required=True, help="Human identity clearing the halt")
+    resume_p.add_argument("--note", default=None)
+
+    clear_p = sub.add_parser("clear-fault", help="Record a human clear for a FAULTED run (andon)")
+    clear_p.add_argument("--initiative", required=True)
+    clear_p.add_argument("--by", required=True, help="Human identity clearing the fault")
+    clear_p.add_argument("--note", default=None)
+
     args = parser.parse_args(argv)
-    handlers = {"plan": cmd_plan, "run": cmd_run}
+    handlers = {
+        "plan": cmd_plan,
+        "run": cmd_run,
+        "resume": cmd_resume,
+        "clear-fault": cmd_clear_fault,
+    }
     return handlers[args.command](args)
 
 

@@ -67,3 +67,38 @@ class TestRunCommand:
     def test_run_requires_aieos_root(self):
         with pytest.raises(SystemExit):
             main(["run", "--initiative", ".", "--manifest", MANIFEST, "--preset", "Enhancement"])
+
+
+class TestAndonCommands:
+    def _halt(self, tmp_path):
+        d = tmp_path / ".aieos"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "halt").write_text("{}")
+
+    def test_resume_requires_by(self):
+        with pytest.raises(SystemExit):
+            main(["resume", "--initiative", "."])
+
+    def test_resume_functional(self, tmp_path, capsys):
+        self._halt(tmp_path)
+        rc = main(["resume", "--initiative", str(tmp_path), "--by", "Todd"])
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["resumed"] is True
+        assert not (tmp_path / ".aieos" / "halt").exists()
+
+    def test_resume_nothing_to_resume_exit_1(self, tmp_path, capsys):
+        (tmp_path / ".aieos").mkdir(parents=True)
+        rc = main(["resume", "--initiative", str(tmp_path), "--by", "Todd"])
+        assert rc == 1
+        assert json.loads(capsys.readouterr().out)["resumed"] is False
+
+    def test_clear_fault_functional(self, tmp_path, capsys):
+        self._halt(tmp_path)
+        rc = main(["clear-fault", "--initiative", str(tmp_path), "--by", "Todd", "--note", "x"])
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["cleared"] is True
+        from src.decision_register import DecisionRegister
+        reg = DecisionRegister(tmp_path / ".aieos" / "decision-register.jsonl")
+        assert reg.entries()[-1].entry_type == "CLEAR_FAULT"
