@@ -166,6 +166,16 @@ class Conductor:
                 self._save(state)
                 return state
 
+            # G-13: the artifact is already FROZEN. The harness refused to touch
+            # it and spent nothing. Mark the node done and walk on -- do NOT
+            # park at a gate a human already cleared, and never re-derive
+            # "is this done?" from our own state file, which is exactly how
+            # frozen work got silently regenerated before this guard existed.
+            if result == LifecycleResult.ALREADY_FROZEN:
+                state.completed.append(node)
+                self._save(state)
+                continue
+
             if result == LifecycleResult.ESCALATION_NEEDED:
                 self._register.append(
                     EntryType.ESCALATION, node,
