@@ -41,6 +41,41 @@ def _conductor(tmp_path, driver, **kw):
     return Conductor(driver, tmp_path, ORDER, **kw)
 
 
+class TestAlreadyFrozenNodesAreSkipped:
+    """G-13: the conductor must walk PAST frozen artifacts, not re-run them.
+
+    Found by the real-AI dogfood 2026-07-15: the conductor decided "is this node
+    done?" from its own state file, never from the artifacts. On a real
+    initiative every upstream artifact is frozen, so a re-walk regenerated over
+    human-approved work. The harness now refuses and returns ALREADY_FROZEN;
+    the conductor must honour that and keep going.
+    """
+
+    def test_frozen_nodes_are_skipped_and_walk_reaches_the_pending_one(self, tmp_path):
+        d = FakeDriver(results={
+            "KER": LifecycleResult.ALREADY_FROZEN,
+            "PRD": LifecycleResult.ALREADY_FROZEN,
+        })
+        state = _conductor(tmp_path, d).run()
+        # Walked past both frozen nodes and parked at the first real work.
+        assert state.status == ConductorStatus.PARKED_AT_GATE.value
+        assert state.current == "EEK:SAD"
+        assert d.lifecycle_calls == ["KER", "PRD", "SAD"]
+
+    def test_frozen_nodes_do_not_park_at_an_already_cleared_gate(self, tmp_path):
+        d = FakeDriver(results={t: LifecycleResult.ALREADY_FROZEN for t in ("KER", "PRD", "SAD")})
+        state = _conductor(tmp_path, d).run()
+        # Every node frozen => the walk is finished, not parked.
+        assert state.status == ConductorStatus.COMPLETED.value
+        assert state.current is None
+
+    def test_frozen_nodes_are_recorded_completed_so_a_rewalk_is_free(self, tmp_path):
+        d = FakeDriver(results={"KER": LifecycleResult.ALREADY_FROZEN})
+        c = _conductor(tmp_path, d)
+        c.run()
+        assert "EEK:KER" in c.run().completed
+
+
 class TestParksAtGate:
     def test_fresh_run_parks_at_first_artifact(self, tmp_path):
         d = FakeDriver()

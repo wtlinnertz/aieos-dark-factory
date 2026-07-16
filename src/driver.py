@@ -23,6 +23,13 @@ from typing import Optional, Protocol, runtime_checkable
 class LifecycleResult(Enum):
     CONVERGED = "CONVERGED"
     ESCALATION_NEEDED = "ESCALATION_NEEDED"
+    # G-13: the target artifact is already FROZEN. The harness refuses to
+    # regenerate over a human's recorded approval and says so BEFORE any
+    # provider call. The conductor treats this as "done, move on" -- which is
+    # what lets it walk a real initiative, where upstream artifacts are always
+    # frozen, without touching them. Must stay in lockstep with the harness
+    # enum: subprocess_driver does LifecycleResult[data["result"]] by name.
+    ALREADY_FROZEN = "ALREADY_FROZEN"
 
 
 class DecisionOutcome(Enum):
