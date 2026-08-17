@@ -1,5 +1,6 @@
 """Tests for the dark-factory CLI."""
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -69,7 +70,7 @@ class TestRunCommand:
         rc = main([
             "run", "--initiative", str(init), "--manifest", MANIFEST,
             "--preset", "Enhancement", "--aieos-root", str(tmp_path / "kits"),
-            "--harness-cmd", f"python3 {fake}",
+            "--harness-cmd", f"{sys.executable} {fake}",
         ])
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
@@ -84,7 +85,7 @@ class TestRunCommand:
         rc = main([
             "run", "--initiative", str(init), "--manifest", MANIFEST,
             "--preset", "Enhancement", "--aieos-root", str(tmp_path / "kits"),
-            "--harness-cmd", f"python3 {fake}",
+            "--harness-cmd", f"{sys.executable} {fake}",
         ])
         assert rc == 3
         out = json.loads(capsys.readouterr().out)
@@ -98,7 +99,7 @@ class TestRunCommand:
         rc = main([
             "run", "--initiative", str(init), "--manifest", MANIFEST,
             "--preset", "Enhancement", "--aieos-root", str(tmp_path / "kits"),
-            "--harness-cmd", f"python3 {fake}", "--attended",
+            "--harness-cmd", f"{sys.executable} {fake}", "--attended",
         ])
         assert rc == 0
         out = json.loads(capsys.readouterr().out)

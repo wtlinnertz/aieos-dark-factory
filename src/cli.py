@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -41,7 +42,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
     order = build_walk_order(manifest, _kits_for(manifest, args.preset))
     driver = SubprocessHarnessDriver(
-        shlex.split(args.harness_cmd),
+        # posix=False on Windows: posix-mode shlex treats backslashes as
+        # escapes and silently eats them out of paths like C:\Users\...
+        # (found by the first Windows run of this suite, 2026-08-16).
+        # Limitation: quoted segments are not unwrapped in non-posix mode,
+        # so a Windows harness path containing spaces should use 8.3 or
+        # forward slashes.
+        shlex.split(args.harness_cmd, posix=os.name != "nt"),
         Path(args.aieos_root),
         cwd=Path(args.harness_cwd) if args.harness_cwd else None,
     )
