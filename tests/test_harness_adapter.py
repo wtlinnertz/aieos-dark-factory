@@ -3,7 +3,7 @@
 
 import pytest
 
-from src.driver import FreezeGateDecision, DecisionOutcome, LifecycleResult
+from src.driver import DecisionOutcome, FreezeGateDecision, LifecycleResult
 from src.harness_adapter import HarnessDriverAdapter
 
 

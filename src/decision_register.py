@@ -15,10 +15,9 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 GENESIS = "GENESIS"
 
@@ -29,6 +28,9 @@ class EntryType(str, Enum):
     RESUME = "RESUME"
     CLEAR_FAULT = "CLEAR_FAULT"
     HALT = "HALT"
+    # FR-014 slice 4: conductor calibration precondition (ratified decision 6).
+    CALIBRATION_REFUSED = "CALIBRATION_REFUSED"
+    CALIBRATION_WARNING = "CALIBRATION_WARNING"
 
 
 @dataclass
@@ -74,7 +76,7 @@ class DecisionRegister:
         if not self._path.exists():
             return []
         out: list[RegisterEntry] = []
-        for line in self._path.read_text().splitlines():
+        for line in self._path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -87,10 +89,10 @@ class DecisionRegister:
         artifact_id: str,
         payload: dict,
         *,
-        now: Optional[datetime] = None,
+        now: datetime | None = None,
     ) -> RegisterEntry:
         etype = entry_type.value if isinstance(entry_type, EntryType) else str(entry_type)
-        ts = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ts = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
         existing = self.entries()
         index = len(existing)
         prev_hash = existing[-1].entry_hash if existing else GENESIS
@@ -105,7 +107,7 @@ class DecisionRegister:
             entry_hash=entry_hash,
         )
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "a") as f:
+        with open(self._path, "a", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(asdict(entry)) + "\n")
         return entry
 

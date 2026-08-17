@@ -173,7 +173,7 @@ class TestCrashResumption:
         assert state.current == "EEK:PRD"
 
 
-from src.summon import LogSummoner  # noqa: E402
+from src.summon import LogSummoner
 
 
 class TestConductorSummon:

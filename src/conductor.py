@@ -18,11 +18,11 @@ run down.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
 
 from src.decision_register import DecisionRegister, EntryType
 from src.driver import HarnessDriver, LifecycleResult
@@ -35,6 +35,10 @@ class ConductorStatus(str, Enum):
     ESCALATED = "ESCALATED"  # convergence exhausted, human needed
     HALTED = "HALTED"  # andon sentinel / lost lock -- stand down
     COMPLETED = "COMPLETED"
+    # FR-014 slice 4: refused to START -- an uncalibrated/stale judge on the
+    # path and nobody at the keyboard. Distinct from HALTED (a mid-walk stand-
+    # down); nothing ran and nothing was spent.
+    CALIBRATION_REFUSED = "CALIBRATION_REFUSED"
 
 
 @dataclass
@@ -43,7 +47,7 @@ class ConductorState:
     order: list[str]
     completed: list[str] = field(default_factory=list)
     status: str = ConductorStatus.RUNNING.value
-    current: Optional[str] = None
+    current: str | None = None
     frozen_count_at_park: int = 0
     heartbeat: str = ""
 
@@ -51,7 +55,7 @@ class ConductorState:
         return json.dumps(asdict(self), indent=2)
 
     @classmethod
-    def from_json(cls, text: str) -> "ConductorState":
+    def from_json(cls, text: str) -> ConductorState:
         return cls(**json.loads(text))
 
 
@@ -68,11 +72,13 @@ class Conductor:
         initiative_path: Path,
         order: list[str],
         *,
-        register: Optional[DecisionRegister] = None,
-        state_path: Optional[Path] = None,
-        lock_ok: Optional[Callable[[], bool]] = None,
+        register: DecisionRegister | None = None,
+        state_path: Path | None = None,
+        lock_ok: Callable[[], bool] | None = None,
         halt_check: Callable[[Path], bool] = _halt_present,
-        summoner: Optional[Summoner] = None,
+        summoner: Summoner | None = None,
+        calibration_check: Callable[[str, str], object] | None = None,
+        attended: bool = False,
     ) -> None:
         self._driver = driver
         self._initiative = Path(initiative_path)
@@ -88,17 +94,24 @@ class Conductor:
         self._halt_check = halt_check
         # Andon summon channel (ADR-0004); None = no summon.
         self._summoner = summoner
+        # FR-014 slice 4 (ratified decision 6): injected staleness check,
+        # ``(validator, kit_abbr) -> CalibrationCheck``-shaped result. None
+        # disables the gate (unit tests, pre-slice-4 callers). ``attended``
+        # downgrades refusal to a warning: a human at the keyboard accepts
+        # the risk; an unattended walk may not.
+        self._calibration_check = calibration_check
+        self._attended = attended
 
     # -- state persistence --------------------------------------------------
     def _load_state(self) -> ConductorState:
         if self._state_path.exists():
-            return ConductorState.from_json(self._state_path.read_text())
+            return ConductorState.from_json(self._state_path.read_text(encoding="utf-8"))
         return ConductorState(initiative=str(self._initiative), order=list(self._order))
 
     def _save(self, state: ConductorState) -> None:
-        state.heartbeat = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state.heartbeat = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
-        self._state_path.write_text(state.to_json())
+        self._state_path.write_text(state.to_json(), encoding="utf-8", newline="\n")
 
     def _artifact_type(self, node: str) -> str:
         return node.split(":", 1)[1]
@@ -125,6 +138,45 @@ class Conductor:
             else:
                 return state  # still waiting on the human
 
+        # FR-014 slice 4 (ratified decision 6): calibration precondition.
+        # Every validator on the remaining path must hold a fresh calibration
+        # lock before an UNATTENDED walk spends anything. A missing lock is
+        # stale by definition -- unattended trust arrives per-validator, as
+        # calibration coverage does. Attended runs warn and proceed.
+        if self._calibration_check is not None:
+            pending = [n for n in self._order if n not in state.completed]
+            validators: dict[str, str] = {}
+            for node in pending:
+                validators.setdefault(
+                    f"{self._artifact_type(node).lower()}-validator",
+                    node.split(":", 1)[0],
+                )
+            issues = []
+            for validator, kit_abbr in sorted(validators.items()):
+                check = self._calibration_check(validator, kit_abbr)
+                if not getattr(check, "fresh", False):
+                    issues.append({
+                        "validator": validator,
+                        "kit": kit_abbr,
+                        "reason": getattr(check, "reason", ""),
+                    })
+            if issues:
+                first = pending[0] if pending else ""
+                if not self._attended:
+                    self._register.append(
+                        EntryType.CALIBRATION_REFUSED, first,
+                        {"issues": issues},
+                    )
+                    self._summon({"event": "calibration_refused", "issues": issues})
+                    state.status = ConductorStatus.CALIBRATION_REFUSED.value
+                    state.current = first or None
+                    self._save(state)
+                    return state
+                self._register.append(
+                    EntryType.CALIBRATION_WARNING, first,
+                    {"issues": issues, "attended": True},
+                )
+
         for node in self._order:
             if node in state.completed:
                 continue
@@ -149,7 +201,7 @@ class Conductor:
                 result = self._driver.run_artifact_lifecycle(
                     self._artifact_type(node), self._initiative
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- deliberate: ANY driver/harness failure is a governance fault; stand down FAULTED, never crash past the andon
                 # Hard trip: a driver/harness failure is a governance-relevant
                 # fault, not a clean stop. Stand the run down FAULTED + summon.
                 from src.andon import Severity, trip

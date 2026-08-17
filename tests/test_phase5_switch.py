@@ -83,7 +83,7 @@ def test_three_way_switch(tmp_path):
         }))
         r = subprocess.run(
             harness_cmd + ["freeze", "--initiative", str(init), "--decision", str(dec)],
-            capture_output=True, text=True, cwd=str(HARNESS),
+            capture_output=True, text=True, cwd=str(HARNESS), check=False,
         )
         assert r.returncode == 0, r.stderr
 
@@ -109,7 +109,7 @@ def test_three_way_switch(tmp_path):
     # 6. one representation + audit trail
     rs = subprocess.run(
         harness_cmd + ["read-state", "--initiative", str(init)],
-        capture_output=True, text=True, cwd=str(HARNESS),
+        capture_output=True, text=True, cwd=str(HARNESS), check=False,
     )
     assert json.loads(rs.stdout)["frozen_count"] == 2
     for md in (init / "docs" / "sdlc").glob("*.md"):

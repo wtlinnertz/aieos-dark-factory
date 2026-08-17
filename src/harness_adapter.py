@@ -24,7 +24,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from src.driver import FreezeGateDecision, FreezeResult, LayerState, LifecycleResult
+from src.driver import (
+    CalibrationCheck,
+    FreezeGateDecision,
+    FreezeResult,
+    LayerState,
+    LifecycleResult,
+)
 
 
 class _HarnessLike(Protocol):
@@ -56,6 +62,25 @@ class HarnessDriverAdapter:
             current_layer=getattr(s, "current_layer", ""),
             current_artifact=getattr(s, "current_artifact", ""),
             frozen_count=getattr(s, "frozen_count", 0),
+        )
+
+    def check_calibration(self, validator: str, lock_path: Path) -> CalibrationCheck:
+        """FR-014 slice 4 duck-passthrough.
+
+        Wrapped facades predating slice 4 lack the op; absent means NOT
+        fresh -- an unverifiable judge is an untrusted judge (the same safe
+        direction as a missing lock).
+        """
+        fn = getattr(self._h, "check_calibration", None)
+        if fn is None:
+            return CalibrationCheck(
+                fresh=False,
+                reason="check_unavailable: wrapped harness driver has no check_calibration",
+            )
+        result = fn(validator, lock_path)
+        return CalibrationCheck(
+            fresh=bool(getattr(result, "fresh", False)),
+            reason=str(getattr(result, "reason", "") or ""),
         )
 
     def apply_freeze_decision(self, decision: FreezeGateDecision) -> FreezeResult:

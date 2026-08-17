@@ -73,8 +73,8 @@ class TestChainIntegrity:
         assert _register(tmp_path).verify_chain() is True
 
 
-from src.andon import Severity, trip  # noqa: E402
-from src.summon import LogSummoner  # noqa: E402
+from src.andon import Severity, trip
+from src.summon import LogSummoner
 
 
 class TestTrip:
@@ -123,9 +123,9 @@ class TestTripStatusWriter:
         assert writes == []  # no artifact_id -> no status write
 
 
-from datetime import datetime, timezone  # noqa: E402
+from datetime import UTC, datetime
 
-from src.andon import check_liveness  # noqa: E402
+from src.andon import check_liveness
 
 
 def _state_with_heartbeat(tmp_path, hb: str):
@@ -136,7 +136,7 @@ def _state_with_heartbeat(tmp_path, hb: str):
 
 
 class TestLiveness:
-    T = datetime(2026, 7, 12, 12, 0, 0, tzinfo=timezone.utc)
+    T = datetime(2026, 7, 12, 12, 0, 0, tzinfo=UTC)
 
     def test_trips_when_stale(self, tmp_path):
         _state_with_heartbeat(tmp_path, "2026-07-12T11:00:00Z")  # 1h old

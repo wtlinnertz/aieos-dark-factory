@@ -14,7 +14,8 @@ testable and the transport is pluggable:
 
 from __future__ import annotations
 
-from typing import Callable, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable

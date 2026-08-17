@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from src.driver import FreezeGateDecision, FreezeResult, LayerState, LifecycleResult
 
@@ -36,8 +36,8 @@ class SubprocessHarnessDriver:
         harness_cmd: list[str],
         aieos_root: Path,
         *,
-        cwd: Optional[Path] = None,
-        runner: Callable[..., "subprocess.CompletedProcess"] = subprocess.run,
+        cwd: Path | None = None,
+        runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     ) -> None:
         # e.g. harness_cmd = ["python", "-m", "src.cli"] (with cwd=harness repo)
         # or an installed entrypoint ["harness"]. Always an argv list, never a
@@ -76,6 +76,46 @@ class SubprocessHarnessDriver:
             "--aieos-root", str(self._aieos_root),
         ])
         return LifecycleResult[data["result"]]
+
+    def check_calibration(self, validator: str, lock_path: Path):
+        """FR-014 slice 4: the deterministic staleness check, subprocess seam.
+
+        ``harness calibrate --check-only`` is the canonical implementation --
+        it verifies BOTH halves (validator prompt sha resolved from the kits
+        AND the configured judge model), which a local hash compare cannot.
+        Exit 0 = fresh, exit 4 = stale; both are answers, not failures, so
+        this method runs the process directly instead of via ``_invoke``
+        (which treats any nonzero exit as an error). No LLM is reachable
+        from the --check-only path.
+        """
+        from src.driver import CalibrationCheck
+
+        args = [
+            "calibrate", "--check-only",
+            "--validator", validator,
+            "--lock", str(lock_path),
+        ]
+        proc = self._runner(
+            self._cmd + args,
+            capture_output=True,
+            text=True,
+            cwd=str(self._cwd) if self._cwd else None,
+        )
+        if proc.returncode not in (0, 4):
+            raise SubprocessHarnessError(
+                f"harness calibrate --check-only failed (exit {proc.returncode}): "
+                f"{(proc.stderr or '').strip()}"
+            )
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            raise SubprocessHarnessError(
+                f"harness calibrate returned non-JSON: {proc.stdout[:200]!r}"
+            ) from exc
+        return CalibrationCheck(
+            fresh=bool(data.get("fresh", False)),
+            reason=str(data.get("reason", "") or ""),
+        )
 
     def read_layer_state(self, initiative_path: Path) -> LayerState:
         data = self._invoke(["read-state", "--initiative", str(initiative_path)])

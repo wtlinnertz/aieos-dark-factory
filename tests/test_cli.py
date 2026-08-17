@@ -1,6 +1,6 @@
 """Tests for the dark-factory CLI."""
 import json
-
+import sys
 from pathlib import Path
 
 import pytest
@@ -45,6 +45,19 @@ if a[0] == "run-artifact":
     print(json.dumps({"result": "CONVERGED"}))
 elif a[0] == "read-state":
     print(json.dumps({"frozen_count": 0}))
+elif a[0] == "calibrate":
+    # FR-014 slice 4: the conductor precondition asks --check-only; answer fresh.
+    print(json.dumps({"fresh": True, "reason": ""}))
+'''
+
+# FR-014 slice 4: a fake harness whose calibration answer is stale.
+_FAKE_CLI_STALE = '''\
+import json, sys
+a = sys.argv[1:]
+if a[0] == "calibrate":
+    print(json.dumps({"fresh": False, "reason": "missing_lock"}))
+    sys.exit(4)
+print(json.dumps({"result": "CONVERGED"}))
 '''
 
 
@@ -57,12 +70,40 @@ class TestRunCommand:
         rc = main([
             "run", "--initiative", str(init), "--manifest", MANIFEST,
             "--preset", "Enhancement", "--aieos-root", str(tmp_path / "kits"),
-            "--harness-cmd", f"python3 {fake}",
+            "--harness-cmd", f"{sys.executable} {fake}",
         ])
         assert rc == 0
         out = json.loads(capsys.readouterr().out)
         assert out["status"] == "PARKED_AT_GATE"
         assert out["current"] == "EEK:KER"
+
+    def test_run_unattended_refuses_on_stale_calibration_exit_3(self, tmp_path, capsys):
+        fake = tmp_path / "fake.py"
+        fake.write_text(_FAKE_CLI_STALE)
+        init = tmp_path / "init"
+        init.mkdir()
+        rc = main([
+            "run", "--initiative", str(init), "--manifest", MANIFEST,
+            "--preset", "Enhancement", "--aieos-root", str(tmp_path / "kits"),
+            "--harness-cmd", f"{sys.executable} {fake}",
+        ])
+        assert rc == 3
+        out = json.loads(capsys.readouterr().out)
+        assert out["status"] == "CALIBRATION_REFUSED"
+
+    def test_run_attended_warns_and_proceeds(self, tmp_path, capsys):
+        fake = tmp_path / "fake.py"
+        fake.write_text(_FAKE_CLI_STALE)
+        init = tmp_path / "init"
+        init.mkdir()
+        rc = main([
+            "run", "--initiative", str(init), "--manifest", MANIFEST,
+            "--preset", "Enhancement", "--aieos-root", str(tmp_path / "kits"),
+            "--harness-cmd", f"{sys.executable} {fake}", "--attended",
+        ])
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["status"] == "PARKED_AT_GATE"
 
     def test_run_requires_aieos_root(self):
         with pytest.raises(SystemExit):
