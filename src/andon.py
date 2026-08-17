@@ -126,7 +126,7 @@ def trip(
     }
     halt = _halt_path(initiative_path)
     halt.parent.mkdir(parents=True, exist_ok=True)
-    halt.write_text(json.dumps(payload, indent=2))
+    halt.write_text(json.dumps(payload, indent=2), encoding="utf-8", newline="\n")
     _register_for(initiative_path, register).append(
         EntryType.HALT,
         "INITIATIVE",
@@ -164,7 +164,7 @@ def check_liveness(
     state_path = Path(initiative_path) / ".aieos" / "conductor-state.json"
     if not state_path.exists():
         return False
-    data = json.loads(state_path.read_text())
+    data = json.loads(state_path.read_text(encoding="utf-8"))
     hb = data.get("heartbeat")
     if not hb:
         return False

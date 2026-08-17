@@ -105,13 +105,13 @@ class Conductor:
     # -- state persistence --------------------------------------------------
     def _load_state(self) -> ConductorState:
         if self._state_path.exists():
-            return ConductorState.from_json(self._state_path.read_text())
+            return ConductorState.from_json(self._state_path.read_text(encoding="utf-8"))
         return ConductorState(initiative=str(self._initiative), order=list(self._order))
 
     def _save(self, state: ConductorState) -> None:
         state.heartbeat = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
-        self._state_path.write_text(state.to_json())
+        self._state_path.write_text(state.to_json(), encoding="utf-8", newline="\n")
 
     def _artifact_type(self, node: str) -> str:
         return node.split(":", 1)[1]

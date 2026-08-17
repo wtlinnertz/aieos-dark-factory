@@ -5,7 +5,14 @@ on:
   pull_request:
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # windows-latest added with the G-6-class sweep (2026-08-16): the first
+    # Windows run of this suite found load_manifest crashing on cp1252 --
+    # the same defect class the harness fixed in v1.3.1. The matrix is the
+    # enforcement.
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

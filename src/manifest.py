@@ -60,7 +60,7 @@ class Manifest:
 
 
 def load_manifest(path: Path) -> Manifest:
-    data = yaml.safe_load(Path(path).read_text())
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
 
     kits: dict[str, Kit] = {}
     for abbr, k in data.get("kits", {}).items():

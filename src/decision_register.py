@@ -76,7 +76,7 @@ class DecisionRegister:
         if not self._path.exists():
             return []
         out: list[RegisterEntry] = []
-        for line in self._path.read_text().splitlines():
+        for line in self._path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -107,7 +107,7 @@ class DecisionRegister:
             entry_hash=entry_hash,
         )
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "a") as f:
+        with open(self._path, "a", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(asdict(entry)) + "\n")
         return entry
 
