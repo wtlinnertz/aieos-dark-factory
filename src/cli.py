@@ -45,12 +45,38 @@ def cmd_run(args: argparse.Namespace) -> int:
         Path(args.aieos_root),
         cwd=Path(args.harness_cwd) if args.harness_cwd else None,
     )
-    state = Conductor(driver, Path(args.initiative), order).run()
+
+    # FR-014 slice 4: resolve each kit's calibration.lock from the manifest's
+    # repository field and check through the harness (--check-only, no LLM).
+    aieos_root = Path(args.aieos_root)
+
+    def _calibration_check(validator: str, kit_abbr: str):
+        from src.driver import CalibrationCheck
+
+        kit = manifest.kits.get(kit_abbr)
+        if kit is None or not kit.repository:
+            return CalibrationCheck(
+                fresh=False,
+                reason=f"kit {kit_abbr!r} has no repository mapping in the manifest",
+            )
+        return driver.check_calibration(
+            validator, aieos_root / kit.repository / "calibration.lock"
+        )
+
+    state = Conductor(
+        driver,
+        Path(args.initiative),
+        order,
+        calibration_check=_calibration_check,
+        attended=args.attended,
+    ).run()
     print(json.dumps({
         "status": state.status,
         "current": state.current,
         "completed": state.completed,
     }))
+    if state.status == ConductorStatus.CALIBRATION_REFUSED.value:
+        return 3
     return 1 if state.status == ConductorStatus.HALTED.value else 0
 
 
@@ -103,6 +129,15 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--manifest", required=True)
     run.add_argument("--preset", required=True)
     run.add_argument("--aieos-root", required=True, help="Kit files root for the harness")
+    run.add_argument(
+        "--attended",
+        action="store_true",
+        help=(
+            "A human is at the keyboard: downgrade the FR-014 calibration "
+            "refusal to a warning. Default (unattended) refuses the walk if "
+            "any validator on the path lacks a fresh calibration lock."
+        ),
+    )
     run.add_argument(
         "--harness-cmd", default="harness",
         help="Command to invoke the harness CLI (default: 'harness')",

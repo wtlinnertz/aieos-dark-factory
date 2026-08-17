@@ -32,6 +32,9 @@ class Kit:
     optional: bool
     artifacts: list[Artifact] = field(default_factory=list)
     artifact_flow: list[str] = field(default_factory=list)
+    # Kit repo directory name (FR-014 slice 4: locates <repo>/calibration.lock
+    # under the aieos root for the conductor's calibration precondition).
+    repository: str = ""
 
 
 @dataclass
@@ -78,6 +81,7 @@ def load_manifest(path: Path) -> Manifest:
             optional=k.get("optional", False),
             artifacts=artifacts,
             artifact_flow=list(k.get("artifact_flow", [])),
+            repository=k.get("repository", ""),
         )
 
     edges = [

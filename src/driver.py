@@ -70,6 +70,18 @@ class FreezeResult:
     frozen_count: Optional[int] = None
 
 
+@dataclass
+class CalibrationCheck:
+    """Result of the deterministic calibration-lock staleness check (FR-014).
+
+    Produced by ``harness calibrate --check-only`` through the subprocess
+    seam: string/hash comparison only, no LLM call on this path.
+    """
+
+    fresh: bool
+    reason: str = ""
+
+
 @runtime_checkable
 class HarnessDriver(Protocol):
     """The 3-op facade (ADR-0002). The conductor uses only the first two; it has
@@ -84,6 +96,10 @@ class HarnessDriver(Protocol):
     def apply_freeze_decision(
         self, decision: FreezeGateDecision
     ) -> FreezeResult: ...
+
+    def check_calibration(
+        self, validator: str, lock_path: Path
+    ) -> CalibrationCheck: ...
 
     def mark_status(
         self, artifact_id: str, status: str, initiative_path: Path

@@ -29,6 +29,9 @@ class EntryType(str, Enum):
     RESUME = "RESUME"
     CLEAR_FAULT = "CLEAR_FAULT"
     HALT = "HALT"
+    # FR-014 slice 4: conductor calibration precondition (ratified decision 6).
+    CALIBRATION_REFUSED = "CALIBRATION_REFUSED"
+    CALIBRATION_WARNING = "CALIBRATION_WARNING"
 
 
 @dataclass

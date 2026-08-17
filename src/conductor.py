@@ -35,6 +35,10 @@ class ConductorStatus(str, Enum):
     ESCALATED = "ESCALATED"  # convergence exhausted, human needed
     HALTED = "HALTED"  # andon sentinel / lost lock -- stand down
     COMPLETED = "COMPLETED"
+    # FR-014 slice 4: refused to START -- an uncalibrated/stale judge on the
+    # path and nobody at the keyboard. Distinct from HALTED (a mid-walk stand-
+    # down); nothing ran and nothing was spent.
+    CALIBRATION_REFUSED = "CALIBRATION_REFUSED"
 
 
 @dataclass
@@ -73,6 +77,8 @@ class Conductor:
         lock_ok: Optional[Callable[[], bool]] = None,
         halt_check: Callable[[Path], bool] = _halt_present,
         summoner: Optional[Summoner] = None,
+        calibration_check: Optional[Callable[[str, str], "object"]] = None,
+        attended: bool = False,
     ) -> None:
         self._driver = driver
         self._initiative = Path(initiative_path)
@@ -88,6 +94,13 @@ class Conductor:
         self._halt_check = halt_check
         # Andon summon channel (ADR-0004); None = no summon.
         self._summoner = summoner
+        # FR-014 slice 4 (ratified decision 6): injected staleness check,
+        # ``(validator, kit_abbr) -> CalibrationCheck``-shaped result. None
+        # disables the gate (unit tests, pre-slice-4 callers). ``attended``
+        # downgrades refusal to a warning: a human at the keyboard accepts
+        # the risk; an unattended walk may not.
+        self._calibration_check = calibration_check
+        self._attended = attended
 
     # -- state persistence --------------------------------------------------
     def _load_state(self) -> ConductorState:
@@ -124,6 +137,45 @@ class Conductor:
                 state.status = ConductorStatus.RUNNING.value
             else:
                 return state  # still waiting on the human
+
+        # FR-014 slice 4 (ratified decision 6): calibration precondition.
+        # Every validator on the remaining path must hold a fresh calibration
+        # lock before an UNATTENDED walk spends anything. A missing lock is
+        # stale by definition -- unattended trust arrives per-validator, as
+        # calibration coverage does. Attended runs warn and proceed.
+        if self._calibration_check is not None:
+            pending = [n for n in self._order if n not in state.completed]
+            validators: dict[str, str] = {}
+            for node in pending:
+                validators.setdefault(
+                    f"{self._artifact_type(node).lower()}-validator",
+                    node.split(":", 1)[0],
+                )
+            issues = []
+            for validator, kit_abbr in sorted(validators.items()):
+                check = self._calibration_check(validator, kit_abbr)
+                if not getattr(check, "fresh", False):
+                    issues.append({
+                        "validator": validator,
+                        "kit": kit_abbr,
+                        "reason": getattr(check, "reason", ""),
+                    })
+            if issues:
+                first = pending[0] if pending else ""
+                if not self._attended:
+                    self._register.append(
+                        EntryType.CALIBRATION_REFUSED, first,
+                        {"issues": issues},
+                    )
+                    self._summon({"event": "calibration_refused", "issues": issues})
+                    state.status = ConductorStatus.CALIBRATION_REFUSED.value
+                    state.current = first or None
+                    self._save(state)
+                    return state
+                self._register.append(
+                    EntryType.CALIBRATION_WARNING, first,
+                    {"issues": issues, "attended": True},
+                )
 
         for node in self._order:
             if node in state.completed:
