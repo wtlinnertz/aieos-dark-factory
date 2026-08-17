@@ -1,6 +1,5 @@
 """Tests for the dark-factory CLI."""
 import json
-
 from pathlib import Path
 
 import pytest

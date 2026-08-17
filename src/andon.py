@@ -17,10 +17,10 @@ whole point: the andon must never become a backdoor to promotion.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
 
 from src.decision_register import DecisionRegister, EntryType
 from src.summon import Summoner
@@ -35,7 +35,7 @@ def _halt_path(initiative_path: Path) -> Path:
     return Path(initiative_path) / ".aieos" / "halt"
 
 
-def _register_for(initiative_path: Path, register: Optional[DecisionRegister]) -> DecisionRegister:
+def _register_for(initiative_path: Path, register: DecisionRegister | None) -> DecisionRegister:
     return register or DecisionRegister(
         Path(initiative_path) / ".aieos" / "decision-register.jsonl"
     )
@@ -49,7 +49,7 @@ def resume(
     initiative_path: Path,
     cleared_by: str,
     *,
-    register: Optional[DecisionRegister] = None,
+    register: DecisionRegister | None = None,
     note: str = "",
 ) -> bool:
     """Clear a HALTED run: remove ``.aieos/halt`` and record a RESUME signal.
@@ -76,7 +76,7 @@ def clear_fault(
     initiative_path: Path,
     cleared_by: str,
     *,
-    register: Optional[DecisionRegister] = None,
+    register: DecisionRegister | None = None,
     note: str = "",
 ) -> bool:
     """Clear a FAULTED run: record a CLEAR_FAULT signal, then remove the sentinel.
@@ -105,18 +105,18 @@ def trip(
     reason: str,
     severity: Severity,
     *,
-    register: Optional[DecisionRegister] = None,
-    summoner: Optional[Summoner] = None,
-    details: Optional[dict] = None,
-    artifact_id: Optional[str] = None,
-    status_writer: Optional[Callable[[str, str], None]] = None,
+    register: DecisionRegister | None = None,
+    summoner: Summoner | None = None,
+    details: dict | None = None,
+    artifact_id: str | None = None,
+    status_writer: Callable[[str, str], None] | None = None,
 ) -> dict:
     """Stand a run down (andon trip): write ``.aieos/halt``, record a HALT entry,
     and summon a human. HALTED = clean stop (resumable via ``resume``); FAULTED =
     governance breach (needs ``clear_fault``). Never a freeze -- it never routes
     through ``apply_freeze_decision``. Returns the halt payload.
     """
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = {
         "event": "trip",
         "reason": reason,
@@ -142,16 +142,16 @@ def trip(
 
 
 def _parse_ts(ts: str) -> datetime:
-    return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
 
 
 def check_liveness(
     initiative_path: Path,
     max_idle_seconds: int,
     *,
-    now: Optional[datetime] = None,
-    register: Optional[DecisionRegister] = None,
-    summoner: Optional[Summoner] = None,
+    now: datetime | None = None,
+    register: DecisionRegister | None = None,
+    summoner: Summoner | None = None,
 ) -> bool:
     """Silent-failure backstop: trip HALTED if the conductor has gone quiet.
 
@@ -160,7 +160,7 @@ def check_liveness(
     stand it down (HALTED, resumable) and summon. Returns True if it tripped.
     Returns False when there is no state/heartbeat or the run is still live.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     state_path = Path(initiative_path) / ".aieos" / "conductor-state.json"
     if not state_path.exists():
         return False

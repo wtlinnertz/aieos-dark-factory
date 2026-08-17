@@ -1,11 +1,10 @@
 """Tests for the append-only hash-chained Decision Register."""
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 from src.decision_register import DecisionRegister, EntryType
 
-T0 = datetime(2026, 7, 12, 12, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 7, 12, 12, 0, 0, tzinfo=UTC)
 
 
 class TestAppendAndRead:

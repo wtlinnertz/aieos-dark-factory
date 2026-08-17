@@ -12,8 +12,7 @@ from __future__ import annotations
 import json
 
 from src.conductor import Conductor, ConductorStatus
-from src.decision_register import DecisionRegister
-from src.driver import CalibrationCheck, LayerState, LifecycleResult
+from src.driver import CalibrationCheck
 from tests.test_conductor import FakeDriver
 
 ORDER = ["EEK:KER", "EEK:PRD", "EEK:SAD"]

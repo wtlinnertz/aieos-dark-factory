@@ -18,11 +18,11 @@ run down.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
 
 from src.decision_register import DecisionRegister, EntryType
 from src.driver import HarnessDriver, LifecycleResult
@@ -47,7 +47,7 @@ class ConductorState:
     order: list[str]
     completed: list[str] = field(default_factory=list)
     status: str = ConductorStatus.RUNNING.value
-    current: Optional[str] = None
+    current: str | None = None
     frozen_count_at_park: int = 0
     heartbeat: str = ""
 
@@ -55,7 +55,7 @@ class ConductorState:
         return json.dumps(asdict(self), indent=2)
 
     @classmethod
-    def from_json(cls, text: str) -> "ConductorState":
+    def from_json(cls, text: str) -> ConductorState:
         return cls(**json.loads(text))
 
 
@@ -72,12 +72,12 @@ class Conductor:
         initiative_path: Path,
         order: list[str],
         *,
-        register: Optional[DecisionRegister] = None,
-        state_path: Optional[Path] = None,
-        lock_ok: Optional[Callable[[], bool]] = None,
+        register: DecisionRegister | None = None,
+        state_path: Path | None = None,
+        lock_ok: Callable[[], bool] | None = None,
         halt_check: Callable[[Path], bool] = _halt_present,
-        summoner: Optional[Summoner] = None,
-        calibration_check: Optional[Callable[[str, str], "object"]] = None,
+        summoner: Summoner | None = None,
+        calibration_check: Callable[[str, str], object] | None = None,
         attended: bool = False,
     ) -> None:
         self._driver = driver
@@ -109,7 +109,7 @@ class Conductor:
         return ConductorState(initiative=str(self._initiative), order=list(self._order))
 
     def _save(self, state: ConductorState) -> None:
-        state.heartbeat = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        state.heartbeat = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self._state_path.write_text(state.to_json())
 
@@ -201,7 +201,7 @@ class Conductor:
                 result = self._driver.run_artifact_lifecycle(
                     self._artifact_type(node), self._initiative
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- deliberate: ANY driver/harness failure is a governance fault; stand down FAULTED, never crash past the andon
                 # Hard trip: a driver/harness failure is a governance-relevant
                 # fault, not a clean stop. Stand the run down FAULTED + summon.
                 from src.andon import Severity, trip

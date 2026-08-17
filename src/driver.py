@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 
 class LifecycleResult(Enum):
@@ -67,7 +67,7 @@ class FreezeResult:
     artifact_id: str
     status: str
     decided_by: str
-    frozen_count: Optional[int] = None
+    frozen_count: int | None = None
 
 
 @dataclass

@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from src.driver import FreezeGateDecision, FreezeResult, LayerState, LifecycleResult
 
@@ -36,8 +36,8 @@ class SubprocessHarnessDriver:
         harness_cmd: list[str],
         aieos_root: Path,
         *,
-        cwd: Optional[Path] = None,
-        runner: Callable[..., "subprocess.CompletedProcess"] = subprocess.run,
+        cwd: Path | None = None,
+        runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     ) -> None:
         # e.g. harness_cmd = ["python", "-m", "src.cli"] (with cwd=harness repo)
         # or an installed entrypoint ["harness"]. Always an argv list, never a

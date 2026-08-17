@@ -15,10 +15,9 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 GENESIS = "GENESIS"
 
@@ -90,10 +89,10 @@ class DecisionRegister:
         artifact_id: str,
         payload: dict,
         *,
-        now: Optional[datetime] = None,
+        now: datetime | None = None,
     ) -> RegisterEntry:
         etype = entry_type.value if isinstance(entry_type, EntryType) else str(entry_type)
-        ts = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ts = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
         existing = self.entries()
         index = len(existing)
         prev_hash = existing[-1].entry_hash if existing else GENESIS
